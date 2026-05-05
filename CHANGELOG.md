@@ -15,9 +15,10 @@ Initial open-source release candidate for `codexctl`.
 - Local Codex rollout JSONL viewer through `codexctl view`.
 - Multi-install and multi-account selection with `--codex-bin` and `--codex-home`.
 - High-permission shortcut through `--dangerously-full-access`.
+- Lightweight install paths through `install.sh` and `cargo install --git`.
 
 ### Notes
 
 - `codexctl` does not vendor Codex auth, config, session state, or provider secrets.
 - Local `.jsonl` rollout/sample files are ignored by default.
-- Choose and add a repository license before publishing as a public open-source project.
+- Released under the MIT License.

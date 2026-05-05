@@ -2,6 +2,10 @@
 name = "codexctl"
 version = "0.1.0"
 edition = "2024"
+description = "A lightweight CLI control plane for Codex app-server goals, plan sessions, and JSONL viewing."
+license = "MIT"
+repository = "https://github.com/ChaosRealmsAI/codexctl"
+readme = "README.md"
 
 [[bin]]
 name = "codexctl"

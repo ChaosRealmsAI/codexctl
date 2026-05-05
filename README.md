@@ -14,7 +14,25 @@ keeps raw access to all app-server methods through `raw`.
 
 ## Install
 
-From this repository:
+One-command install from GitHub:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.sh | sh
+```
+
+Pinned release install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.sh | CODEXCTL_TAG=v0.1.0 sh
+```
+
+Direct Cargo install:
+
+```bash
+cargo install --git https://github.com/ChaosRealmsAI/codexctl --tag v0.1.0 --force
+```
+
+From a local checkout:
 
 ```bash
 cargo install --path . --force
