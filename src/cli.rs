@@ -22,7 +22,8 @@ pub struct Cli {
         long,
         default_value = "codex",
         global = true,
-        help = "Codex CLI executable, e.g. codex or /opt/homebrew/bin/codex"
+        help = "Codex CLI executable or wrapper, e.g. codex or /opt/homebrew/bin/codex",
+        long_help = "Codex CLI executable or wrapper. Use this only when you need a different installed Codex binary or a wrapper script. Account/session switching is usually --codex-home instead."
     )]
     pub codex_bin: String,
     #[arg(
@@ -31,7 +32,7 @@ pub struct Cli {
         visible_alias = "account-home",
         value_name = "DIR",
         help = "Optional Codex home/account directory; defaults to the Codex CLI default",
-        long_help = "Optional Codex home/account directory. When set, the wrapper starts `codex app-server` with CODEX_HOME=<DIR>. Use this to switch accounts, config, auth, and session storage. When omitted, the wrapper clears CODEX_HOME for the spawned Codex process so Codex uses its normal default home."
+        long_help = "Optional Codex home/account directory. When set, the wrapper starts Codex with CODEX_HOME=<DIR>. Use this to switch accounts, config, auth, and session storage. A shell alias like `CODEX_HOME=$HOME/.codex-work codex` becomes `codexctl --codex-home ~/.codex-work ...`. When omitted, the wrapper clears CODEX_HOME for the spawned Codex process so Codex uses its normal default home."
     )]
     pub codex_home: Option<PathBuf>,
     #[arg(

@@ -68,7 +68,7 @@ fn load_source(
     }
 
     let Some(run_id) = &args.run_id else {
-        bail!("view requires FILE or --run-id");
+        bail!("view requires FILE or --run-id. Try `codexctl view --help`.");
     };
     let thread_path = thread_path_for_run(
         socket_path,
@@ -113,7 +113,11 @@ fn thread_path_for_run(
     let run = runs
         .iter()
         .find(|run| run.get("run_id").and_then(Value::as_str) == Some(run_id))
-        .ok_or_else(|| anyhow!("unknown in-memory run id: {run_id}"))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "unknown in-memory run id: {run_id}. Run `codexctl session list` while the daemon is alive, or open the rollout JSONL file directly with `codexctl view <path>`."
+            )
+        })?;
     let path = run
         .get("thread_path")
         .and_then(Value::as_str)

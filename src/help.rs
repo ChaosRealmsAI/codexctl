@@ -10,10 +10,18 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
   3. Read an existing app-server thread from the default Codex home:
        codexctl read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
 
-  4. Run Plan mode with a Goal, unlimited goal budget, unlimited runtime wait, and highest local permission:
+  4. Run one-shot Plan mode with a Goal, unlimited goal budget, unlimited runtime wait, and highest local permission:
        codexctl plan --objective "Validate Goal, Plan mode, and structured questions" --token-budget unlimited --timeout unlimited --prompt-file input.md --dangerously-full-access --question-mode auto-recommended
 
+     For app integrations that need multiple turns, structured answers, plan confirmation, or execution, prefer:
+       codexctl session start --prompt-file input.md --dangerously-full-access
+       codexctl session answer --run-id <run_id> --pick recommended
+       codexctl session send --run-id <run_id> --prompt "I confirm this plan."
+       codexctl session execute --run-id <run_id>
+
   5. Select a different Codex install or account directory only when needed:
+       codexctl --codex-bin /path/to/codex doctor
+       codexctl --codex-home ~/.codex-work doctor
        codexctl --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
        codexctl --codex-home ~/.codex-personal read --thread-id <thread_id> --compact
 
@@ -38,7 +46,7 @@ Command index:
   Protocol discovery     methods, modes, features, raw
   Threads/goals          read, goal set, goal get, goal clear
   One-shot planning      plan, answer
-  Long sessions          session start, answer, send, execute, list, resume, interrupt, stop
+  Long sessions          session start, answer, send, execute, list, resume, interrupt, stop (recommended for app integrations)
   Viewing                view
   Daemon debugging       daemon status, daemon start, daemon stop
 
@@ -49,8 +57,9 @@ Help forms:
   Session via help       codexctl session help <subcommand>
 
 Global options:
-  --codex-bin <path>     Codex executable. Default: codex.
-  --codex-home <dir>     Optional Codex account/config/session home. Default: cleared for the spawned Codex process, so Codex uses its normal default home.
+  --codex-bin <path>     Codex executable or wrapper. Use for a different installed binary. Default: codex.
+  --codex-home <dir>     Optional Codex account/config/session home. Use for another account/session directory.
+                          Default: cleared for the spawned Codex process, so Codex uses its normal default home.
   --account-home <dir>   Alias for --codex-home.
   --log-dir <dir>        Fixed JSONL log directory. Example: target/codexctl-logs.
   --log-mode <mode>      off disables logs, summary writes compact protocol summaries, full writes full JSON messages.
@@ -59,16 +68,28 @@ Global options:
 Highest permission mode:
   --dangerously-full-access is an alias for --full-auto.
   It starts the Codex thread with sandbox=danger-full-access and approvalPolicy=never.
+
+Multiple Codex accounts or installs:
+  A shell alias like `CODEX_HOME=$HOME/.codex-work codex` becomes:
+       codexctl --codex-home ~/.codex-work doctor
+
+  A separate binary or wrapper becomes:
+       codexctl --codex-bin /path/to/codex doctor
+
+  Use both only when the binary and account home both differ:
+       codexctl --codex-bin /path/to/codex --codex-home ~/.codex-alt doctor
 "#;
 
 pub(crate) const DOCTOR_AFTER_HELP: &str = r#"Examples:
   codexctl doctor
+  codexctl --codex-home ~/.codex-work doctor
   codexctl --codex-bin /opt/homebrew/bin/codex --log-dir target/codexctl-logs doctor
   codexctl --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
 
 What it checks:
-  --codex-bin            Executable used for `codex --version` and `codex app-server`.
+  --codex-bin            Executable or wrapper used for `codex --version` and `codex app-server`.
   --codex-home           Optional account/config/session home passed as CODEX_HOME only for the spawned Codex process.
+                         Use this to translate aliases such as `CODEX_HOME=$HOME/.codex-work codex`.
   --log-dir              Where run-*.jsonl and latest.jsonl are written.
   --log-mode             How much protocol traffic is logged.
 
@@ -335,7 +356,8 @@ pub(crate) const VIEW_AFTER_HELP: &str = r#"Examples:
 
 What it opens:
   FILE                  A local Codex rollout JSONL file.
-  --run-id <run_id>     The local thread_path backing an in-memory daemon run.
+  --run-id <run_id>     The local thread_path backing a currently in-memory daemon run.
+                        This is not durable across daemon restarts; use FILE when a run_id is no longer listed.
 
 Display:
   The top of the generated page shows a copyable resume command:
@@ -348,6 +370,7 @@ Parameters:
 
 Boundary:
   The viewer only loads local JSONL. It does not read codexctl state dumps or synthetic daemon events.
+  If --run-id fails with "unknown in-memory run id", run `codexctl session list` or open the rollout file path directly.
 "#;
 
 pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
@@ -357,6 +380,9 @@ pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
      For in-progress inspection, detach after submit and open the run's local Codex JSONL:
        codexctl session start --prompt-file input.md --dangerously-full-access --detach
        codexctl view --run-id <run_id>
+
+     `view --run-id` only works while the local daemon still has that run in memory. The durable fallback is the `thread_path` printed by session commands:
+       codexctl view <thread_path>
 
   2. Answer a structured question by run id.
        codexctl session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
@@ -389,6 +415,7 @@ Run response fields:
   agent_deltas           Text deltas collected so far while status=running.
   thread_path            Local Codex rollout JSONL path used by `codexctl view --run-id`.
 
+Use `session` rather than one-shot `plan` for app integrations that need question answering, plan confirmation, execution, or later inspection.
 The caller only uses CLI commands. The local daemon is an implementation detail and is auto-started by session commands.
 "#;
 
@@ -398,7 +425,7 @@ pub(crate) const SESSION_START_AFTER_HELP: &str = r#"Examples:
   codexctl session start --objective "Plan the feature" --token-budget unlimited --timeout unlimited --prompt "Ask one question first."
 
 Parameters:
-  --detach               Return immediately after submitting turn/start. Use `codexctl view --run-id <run_id>` to inspect the local rollout JSONL.
+  --detach               Return immediately after submitting turn/start. Use `codexctl view --run-id <run_id>` while the daemon is alive, or `codexctl view <thread_path>` as the durable fallback.
 
 Output:
   run_id                 Stable id for future CLI calls.
@@ -432,14 +459,14 @@ pub(crate) const SESSION_SEND_AFTER_HELP: &str = r#"Examples:
   codexctl session send --run-id <run_id> --prompt "I confirm this plan. Continue." --detach
   codexctl session send --run-id <run_id> --prompt-file follow-up.md --timeout unlimited
 
-Use this for normal multi-turn conversation on the same run after a turn completes. Add --detach when the caller wants to return immediately and inspect progress with `codexctl view --run-id`.
+Use this for normal multi-turn conversation on the same run after a turn completes. Add --detach when the caller wants to return immediately and inspect progress with `codexctl view --run-id`. If the daemon no longer knows the run_id, open the printed thread_path with `codexctl view <thread_path>`.
 "#;
 
 pub(crate) const SESSION_EXECUTE_AFTER_HELP: &str = r#"Examples:
   codexctl session execute --run-id <run_id> --detach
   codexctl session execute --run-id <run_id> --prompt "Implement the approved plan."
 
-Use this after a plan is approved. It starts a default-mode turn on the same run. If no prompt is supplied, codexctl sends a small default implementation prompt.
+Use this after a plan is approved. It starts a default-mode turn on the same run and may modify files according to Codex permissions. If no prompt is supplied, codexctl sends a small default implementation prompt.
 "#;
 
 pub(crate) const SESSION_RESUME_AFTER_HELP: &str = r#"Examples:
@@ -461,6 +488,9 @@ pub(crate) const SESSION_LIST_AFTER_HELP: &str = r#"Examples:
 Output:
   runs                  Lightweight in-memory daemon run summaries: run_id, status, current_phase, thread_id, thread_path, and timestamps.
   threads               Recent persisted Codex threads when --threads is set.
+
+Note:
+  run_id is daemon-local and not durable. thread_id/thread_path are the durable identifiers; use `codexctl view <thread_path>` after a daemon restart.
 "#;
 
 pub(crate) const DAEMON_AFTER_HELP: &str = r#"Examples:

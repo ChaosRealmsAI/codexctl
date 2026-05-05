@@ -17,6 +17,20 @@ codexctl --codex-home ~/.codex-work doctor
 codexctl --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
 ```
 
+If your shell alias is only selecting another Codex home, translate it to
+`--codex-home`:
+
+```bash
+# alias example: CODEX_HOME=$HOME/.codex-work codex
+codexctl --codex-home ~/.codex-work doctor
+
+# alias example: CODEX_HOME=$HOME/.codex-e-codex codex
+codexctl --codex-home ~/.codex-e-codex doctor
+```
+
+Use `--codex-bin` only for another installed binary or wrapper. Use both flags
+only when the executable and account/session home both differ.
+
 ## Build
 
 ```bash
@@ -92,6 +106,10 @@ codexctl plan --prompt-file input.md --token-budget unlimited --timeout unlimite
 codexctl --codex-home ~/.codex-work plan --prompt-file input.md --dangerously-full-access
 ```
 
+Use `plan` for one-shot smoke tests. Use `session` for app integrations that
+need multiple turns, structured answers, plan confirmation, execution, or later
+inspection.
+
 CLI-only long sessions:
 
 ```bash
@@ -146,8 +164,15 @@ codexctl view sample-session.jsonl --no-open --out target/view.html
 ```
 
 The viewer only loads local JSONL. `--run-id` is a convenience lookup that asks
-the daemon for the run's `thread_path`, then loads that file. The generated page
-shows a copyable resume command such as:
+the daemon for the run's `thread_path`, then loads that file. `run-id` is only
+valid while the local daemon still has the run in memory; after a daemon restart,
+open the durable `thread_path` directly:
+
+```bash
+codexctl view <thread-path>
+```
+
+The generated page shows a copyable resume command such as:
 
 ```bash
 cd <cwd> && CODEX_HOME=<home> codex resume --include-non-interactive <thread-id>
