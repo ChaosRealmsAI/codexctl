@@ -673,7 +673,7 @@
   <label class="picker" id="picker">
     <input type="file" id="file">
     <div>选 / 拖入任意文件 (jsonl / json)</div>
-    <div class="hint">~/.codex/sessions/**/rollout-*.jsonl 或 codexctl-runs/*/{events.jsonl,latest.json,result.json}</div>
+    <div class="hint">~/.codex/sessions/**/rollout-*.jsonl</div>
   </label>
 
   <div id="file-meta-bar"></div>
@@ -1188,205 +1188,8 @@ function renderUnknown(ev, key) {
 }
 
 // ============== STATS / META ==============
-function camelUsageToSnake(usage) {
-  if (!usage) return null;
-  return {
-    input_tokens: usage.inputTokens || 0,
-    cached_input_tokens: usage.cachedInputTokens || 0,
-    output_tokens: usage.outputTokens || 0,
-    reasoning_output_tokens: usage.reasoningOutputTokens || 0,
-    total_tokens: usage.totalTokens || 0,
-  };
-}
-
-function textFromCodexContent(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content.map(c => c.text || c.content || '').join('');
-}
-
-function recordFromItem(item) {
-  if (!item || !item.type) return null;
-  if (item.type === 'userMessage') {
-    return {
-      type: 'response_item',
-      payload: {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: textFromCodexContent(item.content) }],
-      },
-    };
-  }
-  if (item.type === 'agentMessage' && item.text) {
-    return {
-      type: 'response_item',
-      payload: {
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text: item.text }],
-        phase: item.phase || 'final_answer',
-      },
-    };
-  }
-  if (item.type === 'plan') {
-    return { type: 'event_msg', payload: { type: 'item_completed', item } };
-  }
-  return null;
-}
-
-function requestQuestionsRecord(questions) {
-  return {
-    type: 'response_item',
-    payload: {
-      type: 'function_call',
-      name: 'request_user_input',
-      arguments: JSON.stringify({ questions: questions || [] }),
-    },
-  };
-}
-
-function tokenUsageRecord(params) {
-  const usage = params?.tokenUsage || params?.usage?.tokenUsage || params?.token_usage;
-  if (!usage) return null;
-  return {
-    type: 'event_msg',
-    payload: {
-      type: 'token_count',
-      info: {
-        total_token_usage: camelUsageToSnake(usage.total) || usage.total_token_usage,
-        last_token_usage: camelUsageToSnake(usage.last) || usage.last_token_usage,
-        model_context_window: usage.modelContextWindow || usage.model_context_window,
-      },
-    },
-  };
-}
-
-function normalizeCodexctlEvent(ev) {
-  if (!ev || !ev.kind) return ev;
-  const payload = ev.payload || {};
-  const method = payload.method || ev.kind;
-  const params = payload.params || {};
-
-  if (ev.kind === 'turn/submitted') {
-    return {
-      type: 'turn_context',
-      payload: {
-        turn_id: ev.turn_id || `seq-${ev.seq}`,
-        collaboration_mode: { mode: payload.mode || 'default' },
-      },
-    };
-  }
-  if (method === 'item/completed') return recordFromItem(params.item) || ev;
-  if (method === 'item/tool/requestUserInput') return requestQuestionsRecord(params.questions);
-  if (method === 'thread/tokenUsage/updated') return tokenUsageRecord(params) || ev;
-  if (method === 'warning') {
-    return { type: 'event_msg', payload: { type: 'warning', message: params.message || '' } };
-  }
-  if (method === 'turn/completed') {
-    return {
-      type: 'event_msg',
-      payload: {
-        type: 'task_complete',
-        turn_id: params.turn?.id || ev.turn_id,
-        completed_at: params.turn?.completedAt,
-        duration_ms: params.turn?.durationMs,
-      },
-    };
-  }
-
-  // Delta/startup/status events are noisy; keep the important raw fallback only
-  // when there is no better normalized representation.
-  if (/^(item\/started|item\/agentMessage\/delta|thread\/status\/changed|mcpServer\/|response|serverRequest\/resolved|session\/started)$/.test(method)) {
-    return null;
-  }
-  return ev;
-}
-
-function snapshotToRecords(snapshot) {
-  const records = [];
-  records.push({
-    type: 'session_meta',
-    payload: {
-      id: snapshot.thread_id,
-      cwd: snapshot.cwd,
-      preview: snapshot.run_id,
-      source: 'codexctl',
-    },
-  });
-  records.push({
-    type: 'turn_context',
-    payload: {
-      turn_id: snapshot.turn_id || snapshot.run_id || 'snapshot',
-      collaboration_mode: { mode: snapshot.current_phase === 'resumed' ? 'default' : 'snapshot' },
-    },
-  });
-
-  let hasAgentMessage = false;
-  let hasQuestions = false;
-  for (const raw of snapshot.items || []) {
-    const item = raw?.type ? raw : raw?.params?.item;
-    const method = raw?.method;
-    if (method === 'item/tool/requestUserInput' && raw.params?.questions) {
-      hasQuestions = true;
-      records.push(requestQuestionsRecord(raw.params.questions));
-      continue;
-    }
-    if (method && method !== 'item/completed') continue;
-    const record = recordFromItem(item);
-    if (record) {
-      if (record.payload?.role === 'assistant') hasAgentMessage = true;
-      records.push(record);
-    }
-  }
-
-  if (!hasQuestions && snapshot.questions?.length) records.push(requestQuestionsRecord(snapshot.questions));
-  if (!hasAgentMessage) {
-    for (const message of snapshot.agent_messages || []) {
-      records.push({
-        type: 'response_item',
-        payload: {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: message }],
-          phase: 'final_answer',
-        },
-      });
-    }
-  }
-  for (const plan of snapshot.plans || []) {
-    records.push({ type: 'event_msg', payload: { type: 'item_completed', item: { type: 'plan', text: plan } } });
-  }
-  const usageRecord = tokenUsageRecord(snapshot.usage ? { usage: snapshot.usage } : null);
-  if (usageRecord) records.push(usageRecord);
-  for (const warning of snapshot.warnings || []) {
-    records.push({ type: 'event_msg', payload: { type: 'warning', message: warning.message || warning } });
-  }
-  for (const error of snapshot.errors || []) {
-    records.push({ type: 'event_msg', payload: { type: 'warning', message: error.message || error } });
-  }
-  return records;
-}
-
 function parseInput(text) {
-  const trimmed = text.trim();
-  if (!trimmed) return { records: [], lineCount: 0, parseErrors: 0, format: 'empty' };
-
-  if (/^[\[{]/.test(trimmed)) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) return { records: parsed, lineCount: parsed.length, parseErrors: 0, format: 'json-array' };
-      if (Array.isArray(parsed.events)) return { records: parsed.events, lineCount: parsed.events.length, parseErrors: 0, format: 'events-json' };
-      if (parsed.run_id || parsed.thread_id || parsed.status || parsed.current_phase || parsed.agent_messages || parsed.items) {
-        const records = snapshotToRecords(parsed);
-        return { records, lineCount: 1, parseErrors: 0, format: 'snapshot-json' };
-      }
-      return { records: [parsed], lineCount: 1, parseErrors: 0, format: 'json' };
-    } catch (e) {
-      // fall through to JSONL parsing
-    }
-  }
-
-  const lines = text.split('\n').filter(Boolean);
+  const lines = text.split('\n').filter(line => line.trim().length > 0);
   const records = [];
   let parseErrors = 0;
   for (const line of lines) {
@@ -1400,29 +1203,9 @@ function parseInput(text) {
   return { records, lineCount: lines.length, parseErrors, format: 'jsonl' };
 }
 
-function normalizeRecords(records) {
-  const normalized = [];
-  const firstCodexctl = records.find(e => e?.kind && e?.thread_id);
-  if (firstCodexctl) {
-    normalized.push({
-      type: 'session_meta',
-      payload: {
-        id: firstCodexctl.thread_id,
-        preview: firstCodexctl.run_id,
-        source: 'codexctl',
-      },
-    });
-  }
-  for (const record of records) {
-    const normalizedRecord = normalizeCodexctlEvent(record);
-    if (normalizedRecord) normalized.push(normalizedRecord);
-  }
-  return normalized;
-}
-
 function processSession(text, name) {
   const parsed = parseInput(text);
-  const events = normalizeRecords(parsed.records);
+  const events = parsed.records;
   const parseErrors = parsed.parseErrors;
   if (parseErrors > 0) {
     console.warn(`${parseErrors} 行解析失败 (共 ${parsed.lineCount} 行)`);

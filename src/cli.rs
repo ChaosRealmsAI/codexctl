@@ -14,7 +14,7 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 180;
 #[command(
     name = "codexctl",
     version,
-    about = "Codex control-plane CLI for goals, plan sessions, snapshots, and app-server debugging",
+    about = "Codex control-plane CLI for goals, plan sessions, JSONL viewing, and app-server debugging",
     after_help = help::ROOT_AFTER_HELP
 )]
 pub struct Cli {
@@ -116,6 +116,11 @@ pub enum Commands {
     )]
     Answer(AnswerArgs),
     #[command(
+        about = "Open a local Codex JSONL viewer for a file or daemon run",
+        after_help = help::VIEW_AFTER_HELP
+    )]
+    View(ViewArgs),
+    #[command(
         subcommand,
         about = "Run CLI-only multi-round sessions through a local daemon",
         after_help = help::SESSION_AFTER_HELP
@@ -158,6 +163,30 @@ pub struct ReadArgs {
         help = "Return a small summary instead of the raw thread payload"
     )]
     pub compact: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ViewArgs {
+    #[arg(
+        value_name = "FILE",
+        conflicts_with = "run_id",
+        help = "Local Codex rollout JSONL file to open in the viewer"
+    )]
+    pub file: Option<PathBuf>,
+    #[arg(
+        long,
+        conflicts_with = "file",
+        help = "Open the local Codex rollout JSONL backing an in-memory daemon run"
+    )]
+    pub run_id: Option<String>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Write the generated viewer HTML to this path"
+    )]
+    pub out: Option<PathBuf>,
+    #[arg(long, help = "Generate the viewer HTML but do not open the browser")]
+    pub no_open: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -297,18 +326,6 @@ pub enum SessionCommand {
         after_help = help::SESSION_LIST_AFTER_HELP
     )]
     List(SessionListArgs),
-    #[command(about = "Read in-memory run state from the daemon")]
-    Read(SessionRunIdArgs),
-    #[command(
-        about = "Poll a run snapshot until it pauses or completes",
-        after_help = help::SESSION_WATCH_AFTER_HELP
-    )]
-    Watch(SessionWatchArgs),
-    #[command(
-        about = "Read normalized daemon events for a run",
-        after_help = help::SESSION_EVENTS_AFTER_HELP
-    )]
-    Events(SessionEventsArgs),
     #[command(about = "Stop one run and release its app-server process")]
     Stop(SessionRunIdArgs),
 }
@@ -359,15 +376,9 @@ pub struct SessionStartArgs {
     pub timeout: RunTimeout,
     #[arg(
         long,
-        help = "Return after submitting the turn so session read can snapshot it while running"
+        help = "Return immediately after submitting the turn; inspect progress with codexctl view --run-id"
     )]
     pub detach: bool,
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Write generic codexctl run artifacts under DIR/codexctl-runs/<run-id>"
-    )]
-    pub version_dir: Option<PathBuf>,
     #[command(flatten)]
     pub runtime: RuntimeArgs,
 }
@@ -404,15 +415,9 @@ pub struct SessionAnswerArgs {
     pub timeout: RunTimeout,
     #[arg(
         long,
-        help = "Return after submitting the answer so session read can snapshot it while running"
+        help = "Return immediately after submitting the answer; inspect progress with codexctl view --run-id"
     )]
     pub detach: bool,
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Bind or update generic codexctl artifacts directory for this run"
-    )]
-    pub version_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -436,15 +441,9 @@ pub struct SessionSendArgs {
     pub timeout: RunTimeout,
     #[arg(
         long,
-        help = "Return after submitting the prompt so session read can snapshot it while running"
+        help = "Return immediately after submitting the prompt; inspect progress with codexctl view --run-id"
     )]
     pub detach: bool,
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Bind or update generic codexctl artifacts directory for this run"
-    )]
-    pub version_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -468,15 +467,9 @@ pub struct SessionExecuteArgs {
     pub timeout: RunTimeout,
     #[arg(
         long,
-        help = "Return after submitting the execution turn so session read can snapshot it while running"
+        help = "Return immediately after submitting the execution turn; inspect progress with codexctl view --run-id"
     )]
     pub detach: bool,
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Bind or update generic codexctl artifacts directory for this run"
-    )]
-    pub version_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -487,12 +480,6 @@ pub struct SessionResumeArgs {
     pub effort: Effort,
     #[arg(long, help = "Override model used for future turns")]
     pub model: Option<String>,
-    #[arg(
-        long,
-        value_name = "DIR",
-        help = "Write generic codexctl run artifacts under DIR/codexctl-runs/<run-id>"
-    )]
-    pub version_dir: Option<PathBuf>,
     #[command(flatten)]
     pub runtime: RuntimeArgs,
 }
@@ -510,32 +497,6 @@ pub struct SessionListArgs {
         help = "Maximum persisted threads to return with --threads"
     )]
     pub limit: usize,
-}
-
-#[derive(Debug, Args)]
-pub struct SessionWatchArgs {
-    #[arg(long, help = "Run id returned by codexctl session start or resume")]
-    pub run_id: String,
-    #[arg(
-        long,
-        default_value_t = 1000,
-        help = "Polling interval in milliseconds"
-    )]
-    pub interval_ms: u64,
-    #[arg(long, help = "Print each snapshot as JSONL while polling")]
-    pub jsonl: bool,
-}
-
-#[derive(Debug, Args)]
-pub struct SessionEventsArgs {
-    #[arg(long, help = "Run id returned by codexctl session start or resume")]
-    pub run_id: String,
-    #[arg(
-        long,
-        default_value_t = 0,
-        help = "Only return events with seq greater than this value"
-    )]
-    pub since: u64,
 }
 
 #[derive(Debug, Args)]
@@ -869,6 +830,36 @@ mod tests {
             execute.command,
             Commands::Session(SessionCommand::Execute(_))
         ));
+    }
+
+    #[test]
+    fn parses_view_file() {
+        let cli = Cli::try_parse_from([
+            "codexctl",
+            "view",
+            "sample-session.jsonl",
+            "--no-open",
+            "--out",
+            "target/view.html",
+        ])
+        .unwrap();
+        let Commands::View(args) = cli.command else {
+            panic!("expected view command");
+        };
+        assert_eq!(args.file, Some(PathBuf::from("sample-session.jsonl")));
+        assert_eq!(args.out, Some(PathBuf::from("target/view.html")));
+        assert!(args.no_open);
+    }
+
+    #[test]
+    fn parses_view_run_id() {
+        let cli =
+            Cli::try_parse_from(["codexctl", "view", "--run-id", "run-1", "--no-open"]).unwrap();
+        let Commands::View(args) = cli.command else {
+            panic!("expected view command");
+        };
+        assert_eq!(args.run_id.as_deref(), Some("run-1"));
+        assert!(args.file.is_none());
     }
 
     #[test]

@@ -27,7 +27,7 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
        codexctl session start --help
        codexctl session answer --help
        codexctl session execute --help
-       codexctl session watch --help
+       codexctl view --help
        codexctl goal --help
        codexctl goal set --help
        codexctl read --help
@@ -38,7 +38,8 @@ Command index:
   Protocol discovery     methods, modes, features, raw
   Threads/goals          read, goal set, goal get, goal clear
   One-shot planning      plan, answer
-  Long sessions          session start, answer, send, execute, read, watch, events, list, resume, interrupt, stop
+  Long sessions          session start, answer, send, execute, list, resume, interrupt, stop
+  Viewing                view
   Daemon debugging       daemon status, daemon start, daemon stop
 
 Help forms:
@@ -327,14 +328,30 @@ Output shape:
 Use with plan --question-mode external when another process wants to build the response payload.
 "#;
 
+pub(crate) const VIEW_AFTER_HELP: &str = r#"Examples:
+  codexctl view ~/.codex/sessions/2026/05/05/rollout-019df7b8.jsonl
+  codexctl view sample-session.jsonl --no-open --out target/view.html
+  codexctl view --run-id <run_id>
+
+What it opens:
+  FILE                  A local Codex rollout JSONL file.
+  --run-id <run_id>     The local thread_path backing an in-memory daemon run.
+
+Parameters:
+  --out <file>          Write the generated standalone HTML viewer to this path.
+  --no-open             Generate the HTML but do not open a browser.
+
+Boundary:
+  The viewer only loads local JSONL. It does not read codexctl state dumps or synthetic daemon events.
+"#;
+
 pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
   1. Start a run. The daemon keeps app-server alive and returns when a question or completion appears:
-       codexctl session start --prompt-file input.md --dangerously-full-access --version-dir target/session-artifacts
+       codexctl session start --prompt-file input.md --dangerously-full-access
 
-     For in-progress snapshots, detach after submit and watch/read snapshots:
+     For in-progress inspection, detach after submit and open the run's local Codex JSONL:
        codexctl session start --prompt-file input.md --dangerously-full-access --detach
-       codexctl session watch --run-id <run_id> --jsonl
-       codexctl session read --run-id <run_id>
+       codexctl view --run-id <run_id>
 
   2. Answer a structured question by run id.
        codexctl session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
@@ -348,8 +365,7 @@ pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
 
   5. Inspect, resume, interrupt, or stop runs.
        codexctl session list --threads
-       codexctl session read --run-id <run_id>
-       codexctl session events --run-id <run_id> --since 0
+       codexctl view --run-id <run_id>
        codexctl session resume --thread-id <thread_id>
        codexctl session interrupt --run-id <run_id>
        codexctl session stop --run-id <run_id>
@@ -360,15 +376,13 @@ Return types:
   failed                 The app-server returned an error.
   warning                Warnings are included in the response but do not always stop the run.
 
-Snapshot fields:
+Run response fields:
   status                 running, needs_input, completed, failed, or stopped.
   current_phase          Current coarse phase such as starting, reasoning, agent_message, needs_input, or completed.
   elapsed_ms             Milliseconds since run creation.
   questions              Pending structured questions when status=needs_input.
   agent_deltas           Text deltas collected so far while status=running.
-  event_seq/events_count Event cursor and count for session events/watch callers.
-  version_dir/artifact_dir
-                          Generic artifacts directory when --version-dir is set.
+  thread_path            Local Codex rollout JSONL path used by `codexctl view --run-id`.
 
 The caller only uses CLI commands. The local daemon is an implementation detail and is auto-started by session commands.
 "#;
@@ -377,17 +391,15 @@ pub(crate) const SESSION_START_AFTER_HELP: &str = r#"Examples:
   codexctl session start --prompt-file input.md --dangerously-full-access
   codexctl session start --prompt-file input.md --dangerously-full-access --detach
   codexctl session start --objective "Plan the feature" --token-budget unlimited --timeout unlimited --prompt "Ask one question first."
-  codexctl session start --prompt-file input.md --version-dir target/session-artifacts --dangerously-full-access --detach
 
 Parameters:
-  --detach               Return immediately after submitting turn/start. Use session read to snapshot status while Codex is still running.
-  --version-dir <dir>    Write input.md, latest.json, run.json, events.jsonl, result.json, and result.md under <dir>/codexctl-runs/<run_id>/.
+  --detach               Return immediately after submitting turn/start. Use `codexctl view --run-id <run_id>` to inspect the local rollout JSONL.
 
 Output:
   run_id                 Stable id for future CLI calls.
   thread_id              Codex app-server thread id.
   status                 running when detached, otherwise needs_input, completed, or failed.
-  current_phase          Coarse current phase for snapshot display.
+  current_phase          Coarse current phase for status display.
   questions              Present when status=needs_input.
   agent_messages/plans   Present when the model produced visible output.
 "#;
@@ -405,7 +417,6 @@ Parameters:
   --pick recommended     Select the option label containing "(Recommended)" for every pending question.
   --pick first           Select the first option for every pending question.
   --pick 1,2,1           Select option indexes by pending-question order.
-  --version-dir <dir>    Bind or update the run artifact directory.
 
 Output:
   Same shape as session start. Without --detach, it returns after the next question or completion. With --detach, it returns after submitting the answer.
@@ -416,7 +427,7 @@ pub(crate) const SESSION_SEND_AFTER_HELP: &str = r#"Examples:
   codexctl session send --run-id <run_id> --prompt "I confirm this plan. Continue." --detach
   codexctl session send --run-id <run_id> --prompt-file follow-up.md --timeout unlimited
 
-Use this for normal multi-turn conversation on the same run after a turn completes. Add --detach when a caller wants to read in-progress snapshots with session read.
+Use this for normal multi-turn conversation on the same run after a turn completes. Add --detach when the caller wants to return immediately and inspect progress with `codexctl view --run-id`.
 "#;
 
 pub(crate) const SESSION_EXECUTE_AFTER_HELP: &str = r#"Examples:
@@ -428,7 +439,6 @@ Use this after a plan is approved. It starts a default-mode turn on the same run
 
 pub(crate) const SESSION_RESUME_AFTER_HELP: &str = r#"Examples:
   codexctl session resume --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
-  codexctl session resume --thread-id <thread_id> --version-dir target/session-artifacts
 
 Attaches a daemon run_id to an existing persisted Codex thread through thread/resume.
 "#;
@@ -444,22 +454,8 @@ pub(crate) const SESSION_LIST_AFTER_HELP: &str = r#"Examples:
   codexctl session list --threads --limit 5
 
 Output:
-  runs                  In-memory daemon runs with snapshots.
+  runs                  Lightweight in-memory daemon run summaries: run_id, status, current_phase, thread_id, thread_path, and timestamps.
   threads               Recent persisted Codex threads when --threads is set.
-"#;
-
-pub(crate) const SESSION_WATCH_AFTER_HELP: &str = r#"Examples:
-  codexctl session watch --run-id <run_id>
-  codexctl session watch --run-id <run_id> --jsonl --interval-ms 1000
-
-Polls daemon events and snapshots until the run is no longer running. This is a snapshot-based MVP, not a push stream.
-"#;
-
-pub(crate) const SESSION_EVENTS_AFTER_HELP: &str = r#"Examples:
-  codexctl session events --run-id <run_id>
-  codexctl session events --run-id <run_id> --since 42
-
-Returns normalized daemon events with seq greater than --since.
 "#;
 
 pub(crate) const DAEMON_AFTER_HELP: &str = r#"Examples:

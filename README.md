@@ -61,6 +61,7 @@ codexctl quota
 codexctl models
 codexctl status
 codexctl read --thread-id <thread-id> --compact
+codexctl view ~/.codex/sessions/2026/05/05/rollout-<thread-id>.jsonl
 codexctl --codex-home ~/.codex-work read --thread-id <thread-id> --compact
 ```
 
@@ -105,10 +106,8 @@ codexctl session start \
   --dangerously-full-access \
   --detach
 
-codexctl session read --run-id <run-id>
-codexctl session watch --run-id <run-id> --jsonl
-codexctl session events --run-id <run-id> --since 0
 codexctl session list --threads
+codexctl view --run-id <run-id>
 
 codexctl session answer \
   --run-id <run-id> \
@@ -124,8 +123,6 @@ codexctl session execute \
 
 codexctl session resume --thread-id <thread-id>
 codexctl session interrupt --run-id <run-id>
-
-codexctl session read --run-id <run-id>
 codexctl session stop --run-id <run-id>
 ```
 
@@ -135,33 +132,21 @@ app-server process, thread, pending structured question, and run state alive
 between CLI calls.
 
 Use `--detach` on `session start`, `session answer`, or `session send` when the
-caller wants to return immediately and poll `session read` for an in-progress
-snapshot. Snapshot responses include `status`, `current_phase`, `elapsed_ms`,
-`questions`, `agent_deltas`, `agent_messages`, `plans`, `usage`, and errors.
-Use `--pick recommended`, `--pick first`, or `--pick 1,2,1` to answer pending
+caller wants to return immediately. Use `codexctl view --run-id <run-id>` to
+open the run's local Codex rollout JSONL in the bundled viewer. Use
+`--pick recommended`, `--pick first`, or `--pick 1,2,1` to answer pending
 structured questions without copying exact option labels.
 
-Generic run artifacts:
+Local JSONL viewer:
 
 ```bash
-codexctl session start \
-  --prompt-file input.md \
-  --version-dir target/session-artifacts \
-  --dangerously-full-access \
-  --detach
+codexctl view ~/.codex/sessions/2026/05/05/rollout-<thread-id>.jsonl
+codexctl view --run-id <run-id>
+codexctl view sample-session.jsonl --no-open --out target/view.html
 ```
 
-This writes under:
-
-```text
-<version-dir>/codexctl-runs/<run-id>/
-  input.md
-  latest.json
-  run.json
-  events.jsonl
-  result.json
-  result.md
-```
+The viewer only loads local JSONL. `--run-id` is a convenience lookup that asks
+the daemon for the run's `thread_path`, then loads that file.
 
 Highest local authority:
 
@@ -247,7 +232,7 @@ most useful to automation:
 - thread Goal
 - Plan turns
 - CLI-only multi-round session runs
-- snapshot watch/events/list
+- local JSONL session viewing
 - default-mode execute and turn interrupt
 - structured question answering
 - high-permission execution switch

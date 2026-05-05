@@ -6,6 +6,7 @@ mod logging;
 mod methods;
 mod session;
 mod util;
+mod viewer;
 
 use anyhow::Result;
 use clap::Parser;
@@ -19,6 +20,7 @@ use commands::{
 use methods::KNOWN_METHODS;
 use session::{default_socket_path, run_daemon_command, run_session_command};
 use util::{print_json, read_params};
+use viewer::run_viewer;
 
 fn main() -> Result<()> {
     let Cli {
@@ -100,6 +102,14 @@ fn main() -> Result<()> {
             print_json(result)
         }
         Commands::Answer(args) => print_json(build_answer(args)?),
+        Commands::View(args) => print_json(run_viewer(
+            socket_path,
+            codex_bin,
+            codex_home,
+            log_dir,
+            log_mode,
+            args,
+        )?),
         Commands::Session(command) => print_json(run_session_command(
             socket_path,
             codex_bin,
