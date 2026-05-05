@@ -296,6 +296,7 @@ fn run_doctor(codex_bin: &str, log_dir: Option<PathBuf>, log_mode: LogMode) -> R
         "codex": version_json,
         "app_server": {
             "initialized": true,
+            "codex_home": server.codex_home,
             "modes": modes.get("result").cloned().unwrap_or(modes),
         },
         "log_path": server.log_path(),
@@ -336,6 +337,9 @@ fn run_goal(server: &mut AppServer, command: GoalCommand) -> Result<Value> {
             Ok(json!({
                 "ok": set.get("error").is_none() && get.get("error").is_none(),
                 "thread_id": thread_id,
+                "thread_path": server.last_thread_path,
+                "codex_home": server.codex_home,
+                "resume_command": resume_command(server.codex_home.as_deref(), &thread_id),
                 "set": response_payload(set),
                 "get": response_payload(get),
                 "log_path": server.log_path(),
@@ -399,7 +403,13 @@ fn run_plan(server: &mut AppServer, args: PlanArgs) -> Result<Value> {
         }),
     )?;
 
-    let mut result = PlanRun::new(&thread_id, goal_result, server.log_path());
+    let mut result = PlanRun::new(
+        &thread_id,
+        goal_result,
+        server.log_path(),
+        server.codex_home.clone(),
+        server.last_thread_path.clone(),
+    );
     let timeout = Duration::from_secs(args.timeout_secs);
     loop {
         let message = server.recv(timeout)?;
@@ -650,6 +660,10 @@ fn start_thread(
         .pointer("/result/model")
         .and_then(Value::as_str)
         .map(ToString::to_string);
+    server.last_thread_path = response
+        .pointer("/result/thread/path")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
     Ok(thread_id)
 }
 
@@ -693,6 +707,8 @@ struct PlanRun {
     status: String,
     thread_id: String,
     turn_id: Option<String>,
+    codex_home: Option<String>,
+    thread_path: Option<String>,
     goal: Option<Value>,
     plans: Vec<String>,
     agent_messages: Vec<String>,
@@ -709,11 +725,19 @@ struct PlanRun {
 }
 
 impl PlanRun {
-    fn new(thread_id: &str, goal: Option<Value>, log_path: Option<PathBuf>) -> Self {
+    fn new(
+        thread_id: &str,
+        goal: Option<Value>,
+        log_path: Option<PathBuf>,
+        codex_home: Option<String>,
+        thread_path: Option<String>,
+    ) -> Self {
         Self {
             status: "running".to_string(),
             thread_id: thread_id.to_string(),
             turn_id: None,
+            codex_home,
+            thread_path,
             goal,
             plans: Vec::new(),
             agent_messages: Vec::new(),
@@ -736,6 +760,9 @@ impl PlanRun {
             "status": self.status,
             "thread_id": self.thread_id,
             "turn_id": self.turn_id,
+            "codex_home": self.codex_home,
+            "thread_path": self.thread_path,
+            "resume_command": resume_command(self.codex_home.as_deref(), &self.thread_id),
             "goal": self.goal,
             "plans": self.plans,
             "agent_messages": self.agent_messages,
@@ -758,7 +785,9 @@ struct AppServer {
     rx: Receiver<ServerLine>,
     next_id: u64,
     logger: RunLogger,
+    codex_home: Option<String>,
     last_thread_model: Option<String>,
+    last_thread_path: Option<String>,
 }
 
 impl AppServer {
@@ -795,7 +824,9 @@ impl AppServer {
             rx,
             next_id: 1,
             logger: RunLogger::new(log_dir, log_mode)?,
+            codex_home: None,
             last_thread_model: None,
+            last_thread_path: None,
         })
     }
 
@@ -826,6 +857,10 @@ impl AppServer {
         if let Some(error) = response.get("error") {
             bail!("initialize failed: {error}");
         }
+        self.codex_home = response
+            .pointer("/result/codexHome")
+            .and_then(Value::as_str)
+            .map(ToString::to_string);
         self.send_notification("initialized", None)?;
         Ok(())
     }
@@ -1047,6 +1082,30 @@ fn read_prompt(prompt: Option<String>, prompt_file: Option<PathBuf>) -> Result<S
 
 fn response_payload(value: Value) -> Value {
     value.get("result").cloned().unwrap_or(value)
+}
+
+fn resume_command(codex_home: Option<&str>, thread_id: &str) -> String {
+    match codex_home {
+        Some(home) => format!(
+            "CODEX_HOME={} codex resume --include-non-interactive {}",
+            shell_quote(home),
+            shell_quote(thread_id)
+        ),
+        None => format!(
+            "codex resume --include-non-interactive {}",
+            shell_quote(thread_id)
+        ),
+    }
+}
+
+fn shell_quote(value: &str) -> String {
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-' | ':'))
+    {
+        return value.to_string();
+    }
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn is_response_id(value: &Value, id: u64) -> bool {
