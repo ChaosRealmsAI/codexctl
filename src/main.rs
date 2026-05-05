@@ -53,6 +53,8 @@ enum Commands {
     Modes,
     #[command(about = "List app-server experimental features")]
     Features,
+    #[command(about = "Read an app-server thread, optionally including turns")]
+    Read(ReadArgs),
     #[command(about = "Call any app-server JSON-RPC method")]
     Raw(RawArgs),
     #[command(subcommand, about = "Set, get, or clear a Codex thread goal")]
@@ -73,6 +75,19 @@ struct RawArgs {
     params_file: Option<PathBuf>,
     #[arg(long, help = "Also include notifications seen before the response")]
     include_events: bool,
+}
+
+#[derive(Debug, Args)]
+struct ReadArgs {
+    #[arg(long)]
+    thread_id: String,
+    #[arg(long, help = "Only return thread metadata")]
+    metadata_only: bool,
+    #[arg(
+        long,
+        help = "Return a small summary instead of the raw thread payload"
+    )]
+    compact: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -258,6 +273,22 @@ fn main() -> Result<()> {
         Commands::Features => {
             let mut server = initialized_server(&cli.codex_bin, cli.log_dir, cli.log_mode)?;
             print_json(server.call("experimentalFeature/list", json!({}), false)?)
+        }
+        Commands::Read(args) => {
+            let mut server = initialized_server(&cli.codex_bin, cli.log_dir, cli.log_mode)?;
+            let response = server.call(
+                "thread/read",
+                json!({
+                    "threadId": args.thread_id,
+                    "includeTurns": !args.metadata_only,
+                }),
+                false,
+            )?;
+            if args.compact {
+                print_json(compact_thread_read(response))
+            } else {
+                print_json(response)
+            }
         }
         Commands::Raw(args) => {
             let params = read_params(args.params, args.params_file)?;
@@ -630,6 +661,54 @@ fn build_answer(args: AnswerArgs) -> Result<Value> {
             }
         }
     }))
+}
+
+fn compact_thread_read(response: Value) -> Value {
+    let thread = &response["result"]["thread"];
+    let turns = thread
+        .get("turns")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut messages = Vec::new();
+    for turn in &turns {
+        let turn_id = turn.get("id").and_then(Value::as_str).unwrap_or("");
+        for item in turn
+            .get("items")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let item_type = item.get("type").and_then(Value::as_str).unwrap_or("");
+            let text = match item_type {
+                "userMessage" => item
+                    .get("content")
+                    .and_then(Value::as_array)
+                    .and_then(|content| content.first())
+                    .and_then(|content| content.get("text"))
+                    .and_then(Value::as_str),
+                "agentMessage" => item.get("text").and_then(Value::as_str),
+                _ => None,
+            };
+            if let Some(text) = text {
+                messages.push(json!({
+                    "turn_id": turn_id,
+                    "type": item_type,
+                    "text": text,
+                }));
+            }
+        }
+    }
+    json!({
+        "ok": response.get("error").is_none(),
+        "thread_id": thread.get("id"),
+        "cwd": thread.get("cwd"),
+        "source": thread.get("source"),
+        "status": thread.get("status"),
+        "path": thread.get("path"),
+        "turn_count": turns.len(),
+        "messages": messages,
+    })
 }
 
 fn start_thread(
@@ -1275,5 +1354,32 @@ mod tests {
         let summary = summarize(&value);
         assert_eq!(summary["kind"], "request_user_input");
         assert_eq!(summary["questions"], 1);
+    }
+
+    #[test]
+    fn compact_thread_read_collects_user_and_agent_messages() {
+        let response = json!({
+            "result": {
+                "thread": {
+                    "id": "t1",
+                    "cwd": "/tmp/project",
+                    "source": "vscode",
+                    "status": {"type": "notLoaded"},
+                    "path": "/tmp/session.jsonl",
+                    "turns": [{
+                        "id": "turn1",
+                        "items": [
+                            {"type": "userMessage", "content": [{"type": "text", "text": "hello"}]},
+                            {"type": "agentMessage", "text": "world"}
+                        ]
+                    }]
+                }
+            }
+        });
+        let compact = compact_thread_read(response);
+        assert_eq!(compact["thread_id"], "t1");
+        assert_eq!(compact["turn_count"], 1);
+        assert_eq!(compact["messages"][0]["text"], "hello");
+        assert_eq!(compact["messages"][1]["text"], "world");
     }
 }

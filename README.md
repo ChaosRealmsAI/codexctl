@@ -45,6 +45,7 @@ codex-app doctor
 codex-app methods
 codex-app modes
 codex-app features
+codex-app read --thread-id <thread-id> --compact
 ```
 
 Generic method access:
@@ -52,6 +53,7 @@ Generic method access:
 ```bash
 codex-app raw collaborationMode/list --params '{}'
 codex-app raw model/list --params '{}'
+codex-app raw thread/read --params '{"threadId":"...","includeTurns":true}'
 ```
 
 Goal:
@@ -128,3 +130,15 @@ most useful to automation:
 - logs and summaries
 
 All other app-server APIs are still available through `raw <method> --params`.
+
+## Viewing Sessions
+
+For app-server-created sessions, prefer:
+
+```bash
+codex-app read --thread-id <thread-id> --compact
+```
+
+`codex resume` is a TUI command and is not the primary verification path for
+this wrapper. When it works, use the `resume_command` printed by `goal` or
+`plan`, because app-server may store sessions under a non-default `CODEX_HOME`.
