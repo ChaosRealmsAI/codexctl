@@ -6,6 +6,17 @@ The binary is `codex-app`. It speaks Codex app-server JSONL, adds stable
 high-level commands for Goal, Plan, and structured follow-up questions, and
 keeps raw access to all app-server methods through `raw`.
 
+By default, the wrapper runs `codex` and clears `CODEX_HOME` for the spawned
+Codex process. That means it uses the installed Codex CLI and Codex's normal
+default account/config/session directory. Use explicit flags only when you need
+a different install or account:
+
+```bash
+codex-app --codex-bin /path/to/codex doctor
+codex-app --codex-home ~/.codex-work doctor
+codex-app --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
+```
+
 ## Build
 
 ```bash
@@ -46,6 +57,7 @@ codex-app methods
 codex-app modes
 codex-app features
 codex-app read --thread-id <thread-id> --compact
+codex-app --codex-home ~/.codex-work read --thread-id <thread-id> --compact
 ```
 
 Generic method access:
@@ -60,6 +72,8 @@ Goal:
 
 ```bash
 codex-app goal set --objective "Ship a small CLI" --token-budget 5000
+codex-app goal set --objective "Ship a small CLI" --token-budget unlimited
+codex-app --codex-home ~/.codex-work goal set --objective "Ship a small CLI"
 codex-app goal get --thread-id <thread-id>
 codex-app goal clear --thread-id <thread-id>
 ```
@@ -69,15 +83,17 @@ Plan mode:
 ```bash
 codex-app plan --prompt "Plan only. Ask one question first."
 codex-app plan --prompt-file input.md --question-mode auto-recommended
+codex-app plan --prompt-file input.md --token-budget unlimited --timeout unlimited
+codex-app --codex-home ~/.codex-work plan --prompt-file input.md --dangerously-full-access
 ```
 
 Highest local authority:
 
 ```bash
-codex-app plan --prompt-file input.md --full-auto
+codex-app plan --prompt-file input.md --dangerously-full-access
 ```
 
-`--full-auto` maps to:
+`--dangerously-full-access` is an alias for `--full-auto`. Both map to:
 
 ```text
 sandbox = danger-full-access
@@ -101,7 +117,7 @@ Build an answer payload:
 ```bash
 codex-app answer \
   --question first_version_scope \
-  --answer "A 首版只做 doctor/modes (Recommended)"
+  --answer "A Validate the chain first (Recommended)"
 ```
 
 External mode answer format:
@@ -110,11 +126,39 @@ External mode answer format:
 {
   "answers": {
     "first_version_scope": {
-      "answers": ["A 首版只做 doctor/modes (Recommended)"]
+      "answers": ["A Validate the chain first (Recommended)"]
     }
   }
 }
 ```
+
+## Unlimited Runtime and Budget
+
+Use explicit unlimited values when automation should not cap a run:
+
+```bash
+codex-app plan \
+  --objective "Validate Goal, Plan mode, and structured questions" \
+  --token-budget unlimited \
+  --timeout unlimited \
+  --prompt-file input.md \
+  --dangerously-full-access
+```
+
+Accepted unlimited spellings:
+
+```text
+unlimited
+infinite
+infinity
+none
+off
+0
+```
+
+`--token-budget unlimited` omits `tokenBudget` from the app-server goal payload.
+`--timeout unlimited` waits forever for Plan-mode app-server events. The older
+`--timeout-secs` flag remains as an alias for `--timeout`.
 
 ## Design Boundary
 
@@ -137,6 +181,7 @@ For app-server-created sessions, prefer:
 
 ```bash
 codex-app read --thread-id <thread-id> --compact
+codex-app --codex-home ~/.codex-work read --thread-id <thread-id> --compact
 ```
 
 `codex resume` is a TUI command and is not the primary verification path for
