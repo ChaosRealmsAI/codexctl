@@ -2,10 +2,13 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc::TryRecvError;
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde_json::{Map, Value, json};
@@ -81,6 +84,7 @@ fn session_start_request(config: Value, args: SessionStartArgs) -> Result<Value>
         "effort": args.effort.as_protocol(),
         "model": args.model,
         "timeoutSecs": args.timeout.duration().map(|value| value.as_secs()),
+        "detach": args.detach,
         "runtime": {
             "cwd": runtime.cwd,
             "sandbox": runtime.sandbox,
@@ -95,6 +99,7 @@ fn session_answer_request(args: SessionAnswerArgs) -> Result<Value> {
         "runId": args.run_id,
         "answer": build_session_answer(args.answers, args.answers_json, args.answers_file)?,
         "timeoutSecs": args.timeout.duration().map(|value| value.as_secs()),
+        "detach": args.detach,
     }))
 }
 
@@ -107,6 +112,7 @@ fn session_send_request(args: SessionSendArgs) -> Result<Value> {
         "effort": args.effort.as_protocol(),
         "model": args.model,
         "timeoutSecs": args.timeout.duration().map(|value| value.as_secs()),
+        "detach": args.detach,
     }))
 }
 
@@ -164,19 +170,17 @@ fn ensure_daemon(socket_path: &Path) -> Result<Value> {
         let _ = fs::remove_file(socket_path);
     }
     let exe = std::env::current_exe().context("read current executable path")?;
-    let command = format!(
-        "nohup {} --session-socket {} daemon serve >/dev/null 2>&1 &",
-        shell_quote(&exe.display().to_string()),
-        shell_quote(&socket_path.display().to_string())
-    );
-    Command::new("sh")
-        .arg("-c")
-        .arg(command)
+    let mut command = Command::new(exe);
+    command
+        .arg("--session-socket")
+        .arg(socket_path)
+        .arg("daemon")
+        .arg("serve")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .context("spawn codex-app daemon")?;
+        .stderr(Stdio::null());
+    command.process_group(0);
+    command.spawn().context("spawn codex-app daemon")?;
     for _ in 0..50 {
         thread::sleep(Duration::from_millis(100));
         if let Ok(response) = send_request(socket_path, json!({ "type": "daemon_status" })) {
@@ -229,7 +233,7 @@ fn serve(socket_path: PathBuf) -> Result<Value> {
 
 #[derive(Default)]
 struct SessionDaemon {
-    runs: HashMap<String, RunState>,
+    runs: HashMap<String, RunHandle>,
 }
 
 impl SessionDaemon {
@@ -334,8 +338,7 @@ impl SessionDaemon {
         let log_path = server.log_path();
         let thread_path = server.last_thread_path.clone();
         let codex_home = server.codex_home.clone();
-        let mut state = RunState {
-            server,
+        let state = Arc::new(Mutex::new(RunState::new(RunStateInit {
             run_id: run_id.clone(),
             thread_id,
             thread_model,
@@ -344,123 +347,368 @@ impl SessionDaemon {
             thread_path,
             log_path,
             goal,
-            status: "running".to_string(),
-            turn_id: None,
-            current_turn_request_id: None,
-            pending_request_id: None,
-            questions: Vec::new(),
-            answers: Vec::new(),
-            plans: Vec::new(),
-            agent_messages: Vec::new(),
-            agent_deltas: Vec::new(),
-            usage: None,
-            completed: None,
-            warnings: Vec::new(),
-            errors: Vec::new(),
-            items: Vec::new(),
-        };
-        let request_id = state.server.send_request(
-            "turn/start",
-            json!({
-                "threadId": state.thread_id,
-                "input": [{"type": "text", "text": prompt, "text_elements": []}],
-                "approvalPolicy": state.approval_policy,
-                "collaborationMode": {
-                    "mode": "plan",
-                    "settings": {
-                        "model": state.thread_model,
-                        "reasoning_effort": string_at(&request, "effort")?,
-                        "developer_instructions": Value::Null,
-                    }
-                }
-            }),
+        })));
+        let handle = spawn_run_worker(server, Arc::clone(&state));
+        submit_start_turn(
+            &handle,
+            prompt,
+            string_at(&request, "effort")?,
+            request
+                .get("model")
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
         )?;
-        state.pump_until_pause(request_id, timeout)?;
-        let response = state.snapshot();
-        self.runs.insert(run_id, state);
+        let response = if bool_at(&request, "detach") {
+            snapshot(&state)?
+        } else {
+            wait_until_pause(&state, timeout)?
+        };
+        self.runs.insert(run_id, handle);
         Ok(response)
     }
 
     fn handle_answer(&mut self, request: Value) -> Result<Value> {
         let run_id = string_at(&request, "runId")?;
         let timeout = timeout_at(&request);
-        let state = self
+        let handle = self
             .runs
-            .get_mut(&run_id)
+            .get(&run_id)
             .ok_or_else(|| anyhow!("unknown run id: {run_id}"))?;
-        let Some(request_id) = state.pending_request_id.take() else {
-            bail!("run {run_id} has no pending structured question");
-        };
         let answer = request
             .get("answer")
             .cloned()
             .ok_or_else(|| anyhow!("session_answer missing answer"))?;
-        state.answers.push(answer.clone());
-        state.questions.clear();
-        state.server.send_response(request_id, answer)?;
-        state.status = "running".to_string();
-        let request_id = state.current_turn_request_id.take().unwrap_or_default();
-        state.pump_until_pause(request_id, timeout)?;
-        Ok(state.snapshot())
+        submit_answer(handle, answer)?;
+        if bool_at(&request, "detach") {
+            snapshot(&handle.state)
+        } else {
+            wait_until_pause(&handle.state, timeout)
+        }
     }
 
     fn handle_send(&mut self, request: Value) -> Result<Value> {
         let run_id = string_at(&request, "runId")?;
         let timeout = timeout_at(&request);
-        let state = self
+        let handle = self
             .runs
-            .get_mut(&run_id)
+            .get(&run_id)
             .ok_or_else(|| anyhow!("unknown run id: {run_id}"))?;
-        if state.pending_request_id.is_some() {
-            bail!("run {run_id} has a pending structured question; call session answer first");
-        }
         let prompt = string_at(&request, "prompt")?;
-        if let Some(model) = request.get("model").and_then(Value::as_str) {
-            state.thread_model = model.to_string();
-        }
-        state.reset_turn_fields();
-        let request_id = state.server.send_request(
-            "turn/start",
-            json!({
-                "threadId": state.thread_id,
-                "input": [{"type": "text", "text": prompt, "text_elements": []}],
-                "approvalPolicy": state.approval_policy,
-                "collaborationMode": {
-                    "mode": "plan",
-                    "settings": {
-                        "model": state.thread_model,
-                        "reasoning_effort": string_at(&request, "effort")?,
-                        "developer_instructions": Value::Null,
-                    }
-                }
-            }),
+        submit_start_turn(
+            handle,
+            prompt,
+            string_at(&request, "effort")?,
+            request
+                .get("model")
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
         )?;
-        state.pump_until_pause(request_id, timeout)?;
-        Ok(state.snapshot())
+        if bool_at(&request, "detach") {
+            snapshot(&handle.state)
+        } else {
+            wait_until_pause(&handle.state, timeout)
+        }
     }
 
     fn handle_read(&mut self, request: Value) -> Result<Value> {
         let run_id = string_at(&request, "runId")?;
-        let state = self
+        let handle = self
             .runs
             .get(&run_id)
             .ok_or_else(|| anyhow!("unknown run id: {run_id}"))?;
-        Ok(state.snapshot())
+        snapshot(&handle.state)
     }
 
     fn handle_stop(&mut self, request: Value) -> Result<Value> {
         let run_id = string_at(&request, "runId")?;
-        let existed = self.runs.remove(&run_id).is_some();
+        let existed = self.runs.remove(&run_id);
+        if let Some(handle) = &existed {
+            let _ = handle.control.send(RunCommand::Stop);
+            if let Ok(mut state) = handle.state.lock() {
+                state.set_status("stopped", "stopped");
+            }
+        }
         Ok(json!({
-            "ok": existed,
-            "status": if existed { "stopped" } else { "not_found" },
+            "ok": existed.is_some(),
+            "status": if existed.is_some() { "stopped" } else { "not_found" },
             "run_id": run_id,
         }))
     }
 }
 
+struct RunHandle {
+    state: Arc<Mutex<RunState>>,
+    control: mpsc::Sender<RunCommand>,
+}
+
+enum RunCommand {
+    StartTurn {
+        prompt: String,
+        effort: String,
+        model: Option<String>,
+        response: mpsc::Sender<Result<(), String>>,
+    },
+    Answer {
+        answer: Value,
+        response: mpsc::Sender<Result<(), String>>,
+    },
+    Stop,
+}
+
+fn spawn_run_worker(mut server: AppServer, state: Arc<Mutex<RunState>>) -> RunHandle {
+    let (control, rx) = mpsc::channel();
+    let worker_state = Arc::clone(&state);
+    thread::spawn(move || run_worker_loop(&mut server, worker_state, rx));
+    RunHandle { state, control }
+}
+
+fn submit_start_turn(
+    handle: &RunHandle,
+    prompt: String,
+    effort: String,
+    model: Option<String>,
+) -> Result<()> {
+    let (response, ack) = mpsc::channel();
+    handle
+        .control
+        .send(RunCommand::StartTurn {
+            prompt,
+            effort,
+            model,
+            response,
+        })
+        .context("send start-turn command to session worker")?;
+    wait_worker_ack(ack)
+}
+
+fn submit_answer(handle: &RunHandle, answer: Value) -> Result<()> {
+    let (response, ack) = mpsc::channel();
+    handle
+        .control
+        .send(RunCommand::Answer { answer, response })
+        .context("send answer command to session worker")?;
+    wait_worker_ack(ack)
+}
+
+fn wait_worker_ack(ack: mpsc::Receiver<Result<(), String>>) -> Result<()> {
+    match ack.recv_timeout(Duration::from_secs(10)) {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => bail!("{error}"),
+        Err(_) => bail!("session worker did not acknowledge command"),
+    }
+}
+
+fn wait_until_pause(state: &Arc<Mutex<RunState>>, timeout: Option<Duration>) -> Result<Value> {
+    let started = Instant::now();
+    loop {
+        let response = snapshot(state)?;
+        if response.get("status").and_then(Value::as_str) != Some("running") {
+            return Ok(response);
+        }
+        if let Some(timeout) = timeout
+            && started.elapsed() >= timeout
+        {
+            bail!("timed out waiting for session run to pause after {timeout:?}");
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn snapshot(state: &Arc<Mutex<RunState>>) -> Result<Value> {
+    let state = state
+        .lock()
+        .map_err(|_| anyhow!("session run state lock poisoned"))?;
+    Ok(state.snapshot())
+}
+
+fn run_worker_loop(
+    server: &mut AppServer,
+    state: Arc<Mutex<RunState>>,
+    rx: mpsc::Receiver<RunCommand>,
+) {
+    let mut active = false;
+    loop {
+        loop {
+            match rx.try_recv() {
+                Ok(command) => {
+                    if !handle_worker_command(server, &state, command, &mut active) {
+                        return;
+                    }
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => return,
+            }
+        }
+
+        if active {
+            match server.recv_maybe(Duration::from_millis(100)) {
+                Ok(Some(message)) => {
+                    active = process_server_message(&state, message);
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    mark_failed(&state, error.to_string());
+                    active = false;
+                }
+            }
+            continue;
+        }
+
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok(command) => {
+                if !handle_worker_command(server, &state, command, &mut active) {
+                    return;
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+        }
+    }
+}
+
+fn handle_worker_command(
+    server: &mut AppServer,
+    state: &Arc<Mutex<RunState>>,
+    command: RunCommand,
+    active: &mut bool,
+) -> bool {
+    match command {
+        RunCommand::StartTurn {
+            prompt,
+            effort,
+            model,
+            response,
+        } => {
+            let result = start_turn(server, state, prompt, effort, model);
+            *active = result.is_ok();
+            let _ = response.send(result.map_err(|error| error.to_string()));
+            true
+        }
+        RunCommand::Answer { answer, response } => {
+            let result = answer_question(server, state, answer);
+            *active = result.is_ok();
+            let _ = response.send(result.map_err(|error| error.to_string()));
+            true
+        }
+        RunCommand::Stop => false,
+    }
+}
+
+fn start_turn(
+    server: &mut AppServer,
+    state: &Arc<Mutex<RunState>>,
+    prompt: String,
+    effort: String,
+    model: Option<String>,
+) -> Result<()> {
+    let (thread_id, approval_policy, thread_model) = {
+        let mut state = state
+            .lock()
+            .map_err(|_| anyhow!("session run state lock poisoned"))?;
+        if state.pending_request_id.is_some() {
+            bail!(
+                "run {} has a pending structured question; call session answer first",
+                state.run_id
+            );
+        }
+        if state.status == "running" && state.current_turn_request_id.is_some() {
+            bail!(
+                "run {} is already running; wait for session read to return needs_input or completed",
+                state.run_id
+            );
+        }
+        if let Some(model) = model {
+            state.thread_model = model;
+        }
+        state.reset_turn_fields();
+        (
+            state.thread_id.clone(),
+            state.approval_policy.clone(),
+            state.thread_model.clone(),
+        )
+    };
+    let request_id = server.send_request(
+        "turn/start",
+        json!({
+            "threadId": thread_id,
+            "input": [{"type": "text", "text": prompt, "text_elements": []}],
+            "approvalPolicy": approval_policy,
+            "collaborationMode": {
+                "mode": "plan",
+                "settings": {
+                    "model": thread_model,
+                    "reasoning_effort": effort,
+                    "developer_instructions": Value::Null,
+                }
+            }
+        }),
+    );
+    match request_id {
+        Ok(request_id) => {
+            let mut state = state
+                .lock()
+                .map_err(|_| anyhow!("session run state lock poisoned"))?;
+            state.current_turn_request_id = Some(request_id);
+            state.set_status("running", "reasoning");
+            Ok(())
+        }
+        Err(error) => {
+            mark_failed(state, error.to_string());
+            Err(error)
+        }
+    }
+}
+
+fn answer_question(
+    server: &mut AppServer,
+    state: &Arc<Mutex<RunState>>,
+    answer: Value,
+) -> Result<()> {
+    let request_id = {
+        let mut state = state
+            .lock()
+            .map_err(|_| anyhow!("session run state lock poisoned"))?;
+        let Some(request_id) = state.pending_request_id.take() else {
+            bail!("run {} has no pending structured question", state.run_id);
+        };
+        state.answers.push(answer.clone());
+        state.questions.clear();
+        state.set_status("running", "reasoning");
+        request_id
+    };
+    if let Err(error) = server.send_response(request_id, answer) {
+        mark_failed(state, error.to_string());
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn process_server_message(state: &Arc<Mutex<RunState>>, message: Value) -> bool {
+    let Ok(mut state) = state.lock() else {
+        return false;
+    };
+    state.process_server_message(message)
+}
+
+fn mark_failed(state: &Arc<Mutex<RunState>>, error: String) {
+    if let Ok(mut state) = state.lock() {
+        state.set_status("failed", "failed");
+        state.errors.push(json!({ "error": error }));
+    }
+}
+
+struct RunStateInit {
+    run_id: String,
+    thread_id: String,
+    thread_model: String,
+    approval_policy: String,
+    codex_home: Option<String>,
+    thread_path: Option<String>,
+    log_path: Option<PathBuf>,
+    goal: Option<Value>,
+}
+
 struct RunState {
-    server: AppServer,
     run_id: String,
     thread_id: String,
     thread_model: String,
@@ -470,6 +718,9 @@ struct RunState {
     log_path: Option<PathBuf>,
     goal: Option<Value>,
     status: String,
+    current_phase: String,
+    started_at_ms: u64,
+    updated_at_ms: u64,
     turn_id: Option<String>,
     current_turn_request_id: Option<u64>,
     pending_request_id: Option<Value>,
@@ -486,67 +737,107 @@ struct RunState {
 }
 
 impl RunState {
-    fn pump_until_pause(
-        &mut self,
-        turn_start_request_id: u64,
-        timeout: Option<Duration>,
-    ) -> Result<()> {
-        self.current_turn_request_id = Some(turn_start_request_id);
-        loop {
-            let message = self.server.recv(timeout)?;
-            if is_response_id(&message, turn_start_request_id) {
-                if let Some(error) = message.get("error") {
-                    self.status = "failed".to_string();
-                    self.errors.push(error.clone());
-                    return Ok(());
-                }
-                if let Some(turn_id) = message
-                    .pointer("/result/turn/id")
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string)
-                {
-                    self.turn_id = Some(turn_id);
-                }
-                continue;
+    fn new(init: RunStateInit) -> Self {
+        let now = now_millis();
+        Self {
+            run_id: init.run_id,
+            thread_id: init.thread_id,
+            thread_model: init.thread_model,
+            approval_policy: init.approval_policy,
+            codex_home: init.codex_home,
+            thread_path: init.thread_path,
+            log_path: init.log_path,
+            goal: init.goal,
+            status: "running".to_string(),
+            current_phase: "starting".to_string(),
+            started_at_ms: now,
+            updated_at_ms: now,
+            turn_id: None,
+            current_turn_request_id: None,
+            pending_request_id: None,
+            questions: Vec::new(),
+            answers: Vec::new(),
+            plans: Vec::new(),
+            agent_messages: Vec::new(),
+            agent_deltas: Vec::new(),
+            usage: None,
+            completed: None,
+            warnings: Vec::new(),
+            errors: Vec::new(),
+            items: Vec::new(),
+        }
+    }
+
+    fn process_server_message(&mut self, message: Value) -> bool {
+        if let Some(request_id) = self.current_turn_request_id
+            && is_response_id(&message, request_id)
+        {
+            if let Some(error) = message.get("error") {
+                self.set_status("failed", "failed");
+                self.errors.push(error.clone());
+                self.current_turn_request_id = None;
+                return false;
             }
-            if message.get("method").and_then(Value::as_str) == Some("item/tool/requestUserInput") {
-                self.status = "needs_input".to_string();
-                self.pending_request_id = message.get("id").cloned();
-                self.questions = message
-                    .pointer("/params/questions")
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default();
-                return Ok(());
+            if let Some(turn_id) = message
+                .pointer("/result/turn/id")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+            {
+                self.turn_id = Some(turn_id);
+                self.touch_phase("turn_started");
             }
-            if let Some(method) = message.get("method").and_then(Value::as_str) {
-                match method {
-                    "item/completed" => self.collect_item(&message),
-                    "item/agentMessage/delta" => {
-                        if let Some(delta) =
-                            message.pointer("/params/delta").and_then(Value::as_str)
-                        {
-                            self.agent_deltas.push(delta.to_string());
-                        }
+            return true;
+        }
+        if message.get("method").and_then(Value::as_str) == Some("item/tool/requestUserInput") {
+            self.set_status("needs_input", "needs_input");
+            self.pending_request_id = message.get("id").cloned();
+            self.questions = message
+                .pointer("/params/questions")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            return false;
+        }
+        if let Some(method) = message.get("method").and_then(Value::as_str) {
+            match method {
+                "item/completed" => {
+                    self.collect_item(&message);
+                    self.touch_phase("item_completed");
+                }
+                "item/agentMessage/delta" => {
+                    if let Some(delta) = message.pointer("/params/delta").and_then(Value::as_str) {
+                        self.agent_deltas.push(delta.to_string());
                     }
-                    "thread/tokenUsage/updated" => self.usage = Some(message["params"].clone()),
-                    "turn/completed" => {
-                        self.status = "completed".to_string();
-                        self.completed = Some(message["params"].clone());
-                        self.pending_request_id = None;
-                        self.current_turn_request_id = None;
-                        return Ok(());
-                    }
-                    "error" => {
-                        self.status = "failed".to_string();
-                        self.errors.push(message.clone());
-                        return Ok(());
-                    }
-                    "warning" | "guardianWarning" => self.warnings.push(message.clone()),
-                    _ => self.items.push(message.clone()),
+                    self.touch_phase("agent_message");
+                }
+                "thread/tokenUsage/updated" => {
+                    self.usage = Some(message["params"].clone());
+                    self.touch_phase("token_usage");
+                }
+                "turn/completed" => {
+                    self.set_status("completed", "completed");
+                    self.completed = Some(message["params"].clone());
+                    self.pending_request_id = None;
+                    self.current_turn_request_id = None;
+                    return false;
+                }
+                "error" => {
+                    self.set_status("failed", "failed");
+                    self.errors.push(message.clone());
+                    self.current_turn_request_id = None;
+                    return false;
+                }
+                "warning" | "guardianWarning" => {
+                    self.warnings.push(message.clone());
+                    self.touch_phase("warning");
+                }
+                _ => {
+                    self.items.push(message.clone());
+                    self.touch_phase(method);
                 }
             }
         }
+        true
     }
 
     fn collect_item(&mut self, message: &Value) {
@@ -571,7 +862,7 @@ impl RunState {
     }
 
     fn reset_turn_fields(&mut self) {
-        self.status = "running".to_string();
+        self.set_status("running", "starting");
         self.turn_id = None;
         self.pending_request_id = None;
         self.questions.clear();
@@ -586,10 +877,22 @@ impl RunState {
         self.items.clear();
     }
 
+    fn set_status(&mut self, status: &str, phase: &str) {
+        self.status = status.to_string();
+        self.touch_phase(phase);
+    }
+
+    fn touch_phase(&mut self, phase: &str) {
+        self.current_phase = phase.to_string();
+        self.updated_at_ms = now_millis();
+    }
+
     fn snapshot(&self) -> Value {
+        let now = now_millis();
         json!({
             "ok": self.status != "failed",
             "status": self.status,
+            "current_phase": self.current_phase,
             "run_id": self.run_id,
             "thread_id": self.thread_id,
             "turn_id": self.turn_id,
@@ -602,12 +905,16 @@ impl RunState {
             "goal": self.goal,
             "plans": self.plans,
             "agent_messages": self.agent_messages,
+            "agent_deltas": self.agent_deltas,
             "usage": self.usage,
             "completed": self.completed,
             "warnings": self.warnings,
             "errors": self.errors,
             "items": self.items,
             "log_path": self.log_path,
+            "started_at_ms": self.started_at_ms,
+            "updated_at_ms": self.updated_at_ms,
+            "elapsed_ms": now.saturating_sub(self.started_at_ms),
         })
     }
 }
@@ -631,6 +938,10 @@ fn timeout_at(value: &Value) -> Option<Duration> {
         .map(Duration::from_secs)
 }
 
+fn bool_at(value: &Value, key: &str) -> bool {
+    value.get(key).and_then(Value::as_bool).unwrap_or(false)
+}
+
 fn log_mode_name(mode: LogMode) -> &'static str {
     match mode {
         LogMode::Off => "off",
@@ -649,21 +960,15 @@ fn parse_log_mode(value: String) -> Result<LogMode> {
 }
 
 fn new_run_id() -> String {
+    format!("run-{}-{}", now_millis(), std::process::id())
+}
+
+fn now_millis() -> u64 {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    format!("run-{millis}-{}", std::process::id())
-}
-
-fn shell_quote(value: &str) -> String {
-    if value
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-' | ':'))
-    {
-        return value.to_string();
-    }
-    format!("'{}'", value.replace('\'', "'\\''"))
+    millis.min(u64::MAX as u128) as u64
 }
 
 #[cfg(test)]

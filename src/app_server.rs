@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
@@ -174,9 +174,13 @@ impl AppServer {
     pub(crate) fn recv(&mut self, timeout: Option<Duration>) -> Result<Value> {
         loop {
             let line = match timeout {
-                Some(timeout) => self.rx.recv_timeout(timeout).map_err(|_| {
-                    anyhow!("timed out waiting for app-server event after {timeout:?}")
-                })?,
+                Some(timeout) => match self.rx.recv_timeout(timeout) {
+                    Ok(line) => line,
+                    Err(RecvTimeoutError::Timeout) => {
+                        bail!("timed out waiting for app-server event after {timeout:?}")
+                    }
+                    Err(RecvTimeoutError::Disconnected) => bail!("app-server stream closed"),
+                },
                 None => self
                     .rx
                     .recv()
@@ -188,6 +192,27 @@ impl AppServer {
                         .with_context(|| format!("app-server returned invalid JSON: {line}"))?;
                     self.logger.log("in", &value)?;
                     return Ok(value);
+                }
+                ServerLine::Stderr(line) => {
+                    self.logger.log("stderr", &json!({ "line": line }))?;
+                }
+            }
+        }
+    }
+
+    pub(crate) fn recv_maybe(&mut self, timeout: Duration) -> Result<Option<Value>> {
+        loop {
+            let line = match self.rx.recv_timeout(timeout) {
+                Ok(line) => line,
+                Err(RecvTimeoutError::Timeout) => return Ok(None),
+                Err(RecvTimeoutError::Disconnected) => bail!("app-server stream closed"),
+            };
+            match line {
+                ServerLine::Stdout(line) => {
+                    let value: Value = serde_json::from_str(&line)
+                        .with_context(|| format!("app-server returned invalid JSON: {line}"))?;
+                    self.logger.log("in", &value)?;
+                    return Ok(Some(value));
                 }
                 ServerLine::Stderr(line) => {
                     self.logger.log("stderr", &json!({ "line": line }))?;

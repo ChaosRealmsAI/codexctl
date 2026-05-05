@@ -96,6 +96,13 @@ codex-app session start \
   --timeout unlimited \
   --dangerously-full-access
 
+codex-app session start \
+  --prompt-file input.md \
+  --dangerously-full-access \
+  --detach
+
+codex-app session read --run-id <run-id>
+
 codex-app session answer \
   --run-id <run-id> \
   --answer 'scope=A Small plan (Recommended)'
@@ -112,6 +119,11 @@ codex-app session stop --run-id <run-id>
 socket. The caller still only invokes CLI commands. The daemon keeps the
 app-server process, thread, pending structured question, and run state alive
 between CLI calls.
+
+Use `--detach` on `session start`, `session answer`, or `session send` when the
+caller wants to return immediately and poll `session read` for an in-progress
+snapshot. Snapshot responses include `status`, `current_phase`, `elapsed_ms`,
+`questions`, `agent_deltas`, `agent_messages`, `plans`, `usage`, and errors.
 
 Highest local authority:
 

@@ -279,6 +279,10 @@ pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
   1. Start a run. The daemon keeps app-server alive and returns when a question or completion appears.
        codex-app session start --prompt-file input.md --dangerously-full-access
 
+     For in-progress snapshots, detach after submit and poll session read:
+       codex-app session start --prompt-file input.md --dangerously-full-access --detach
+       codex-app session read --run-id <run_id>
+
   2. Answer a structured question by run id.
        codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
 
@@ -295,34 +299,48 @@ Return types:
   failed                 The app-server returned an error.
   warning                Warnings are included in the response but do not always stop the run.
 
+Snapshot fields:
+  status                 running, needs_input, completed, failed, or stopped.
+  current_phase          Current coarse phase such as starting, reasoning, agent_message, needs_input, or completed.
+  elapsed_ms             Milliseconds since run creation.
+  questions              Pending structured questions when status=needs_input.
+  agent_deltas           Text deltas collected so far while status=running.
+
 The caller only uses CLI commands. The local daemon is an implementation detail and is auto-started by session commands.
 "#;
 
 pub(crate) const SESSION_START_AFTER_HELP: &str = r#"Examples:
   codex-app session start --prompt-file input.md --dangerously-full-access
+  codex-app session start --prompt-file input.md --dangerously-full-access --detach
   codex-app session start --objective "Plan the feature" --token-budget unlimited --timeout unlimited --prompt "Ask one question first."
+
+Parameters:
+  --detach               Return immediately after submitting turn/start. Use session read to snapshot status while Codex is still running.
 
 Output:
   run_id                 Stable id for future CLI calls.
   thread_id              Codex app-server thread id.
-  status                 needs_input, completed, or failed.
+  status                 running when detached, otherwise needs_input, completed, or failed.
+  current_phase          Coarse current phase for snapshot display.
   questions              Present when status=needs_input.
   agent_messages/plans   Present when the model produced visible output.
 "#;
 
 pub(crate) const SESSION_ANSWER_AFTER_HELP: &str = r#"Examples:
   codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
+  codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)" --detach
   codex-app session answer --run-id <run_id> --answers-json '{"scope":{"answers":["A Small plan (Recommended)"]}}'
 
 Output:
-  Same shape as session start. It returns after the next question or completion.
+  Same shape as session start. Without --detach, it returns after the next question or completion. With --detach, it returns after submitting the answer.
 "#;
 
 pub(crate) const SESSION_SEND_AFTER_HELP: &str = r#"Examples:
   codex-app session send --run-id <run_id> --prompt "I confirm this plan. Continue."
+  codex-app session send --run-id <run_id> --prompt "I confirm this plan. Continue." --detach
   codex-app session send --run-id <run_id> --prompt-file follow-up.md --timeout unlimited
 
-Use this for normal multi-turn conversation on the same run after a turn completes.
+Use this for normal multi-turn conversation on the same run after a turn completes. Add --detach when a caller wants to read in-progress snapshots with session read.
 "#;
 
 pub(crate) const DAEMON_AFTER_HELP: &str = r#"Examples:

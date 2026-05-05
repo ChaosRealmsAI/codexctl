@@ -315,9 +315,14 @@ pub struct SessionStartArgs {
         long = "timeout",
         visible_alias = "timeout-secs",
         default_value_t = RunTimeout::Unlimited,
-        help = "Maximum wait time for one app-server event: seconds or unlimited"
+        help = "Maximum wait time for this session command to pause: seconds or unlimited"
     )]
     pub timeout: RunTimeout,
+    #[arg(
+        long,
+        help = "Return after submitting the turn so session read can snapshot it while running"
+    )]
+    pub detach: bool,
     #[command(flatten)]
     pub runtime: RuntimeArgs,
 }
@@ -343,9 +348,14 @@ pub struct SessionAnswerArgs {
         long = "timeout",
         visible_alias = "timeout-secs",
         default_value_t = RunTimeout::Unlimited,
-        help = "Maximum wait time for one app-server event: seconds or unlimited"
+        help = "Maximum wait time for this session command to pause: seconds or unlimited"
     )]
     pub timeout: RunTimeout,
+    #[arg(
+        long,
+        help = "Return after submitting the answer so session read can snapshot it while running"
+    )]
+    pub detach: bool,
 }
 
 #[derive(Debug, Args)]
@@ -364,9 +374,14 @@ pub struct SessionSendArgs {
         long = "timeout",
         visible_alias = "timeout-secs",
         default_value_t = RunTimeout::Unlimited,
-        help = "Maximum wait time for one app-server event: seconds or unlimited"
+        help = "Maximum wait time for this session command to pause: seconds or unlimited"
     )]
     pub timeout: RunTimeout,
+    #[arg(
+        long,
+        help = "Return after submitting the prompt so session read can snapshot it while running"
+    )]
+    pub detach: bool,
 }
 
 #[derive(Debug, Args)]
@@ -640,7 +655,7 @@ mod tests {
 
     use clap::Parser;
 
-    use super::{Cli, Commands};
+    use super::{Cli, Commands, SessionCommand};
     use super::{RunTimeout, TokenBudget};
 
     #[test]
@@ -655,6 +670,23 @@ mod tests {
         let cli = Cli::try_parse_from(["codex-app", "--account-home", "/tmp/codex-work", "doctor"])
             .unwrap();
         assert_eq!(cli.codex_home, Some(PathBuf::from("/tmp/codex-work")));
+    }
+
+    #[test]
+    fn parses_session_start_detach() {
+        let cli = Cli::try_parse_from([
+            "codex-app",
+            "session",
+            "start",
+            "--prompt",
+            "hello",
+            "--detach",
+        ])
+        .unwrap();
+        let Commands::Session(SessionCommand::Start(args)) = cli.command else {
+            panic!("expected session start command");
+        };
+        assert!(args.detach);
     }
 
     #[test]
