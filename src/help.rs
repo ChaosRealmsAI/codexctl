@@ -87,6 +87,37 @@ Output:
 Use this to discover app-server feature flags exposed by the installed Codex build.
 "#;
 
+pub(crate) const ACCOUNT_AFTER_HELP: &str = r#"Examples:
+  codex-app account
+  codex-app --codex-home ~/.codex-work account
+
+Output:
+  ok, account, codex_home, log_path, and raw account/read response.
+"#;
+
+pub(crate) const QUOTA_AFTER_HELP: &str = r#"Examples:
+  codex-app quota
+  codex-app --codex-home ~/.codex-work quota
+
+Output:
+  ok, rate_limits, codex_home, log_path, and raw account/rateLimits/read response.
+"#;
+
+pub(crate) const MODELS_AFTER_HELP: &str = r#"Examples:
+  codex-app models
+  codex-app models | jq -r '.models[] | [.id, .is_default, .default_reasoning_effort] | @tsv'
+
+Output:
+  ok, models, codex_home, log_path, and raw model/list response.
+"#;
+
+pub(crate) const STATUS_AFTER_HELP: &str = r#"Examples:
+  codex-app status
+
+Output:
+  daemon status without auto-starting the daemon, plus account, rate_limits, models, codex_home, and log_path.
+"#;
+
 pub(crate) const READ_AFTER_HELP: &str = r#"Examples:
   codex-app read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
   codex-app --codex-home ~/.codex-work read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
@@ -341,6 +372,49 @@ pub(crate) const SESSION_SEND_AFTER_HELP: &str = r#"Examples:
   codex-app session send --run-id <run_id> --prompt-file follow-up.md --timeout unlimited
 
 Use this for normal multi-turn conversation on the same run after a turn completes. Add --detach when a caller wants to read in-progress snapshots with session read.
+"#;
+
+pub(crate) const SESSION_EXECUTE_AFTER_HELP: &str = r#"Examples:
+  codex-app session execute --run-id <run_id> --detach
+  codex-app session execute --run-id <run_id> --prompt "Implement the approved plan."
+
+Use this after a plan is approved. It starts a default-mode turn on the same run. If no prompt is supplied, codex-app sends a small default implementation prompt.
+"#;
+
+pub(crate) const SESSION_RESUME_AFTER_HELP: &str = r#"Examples:
+  codex-app session resume --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
+  codex-app session resume --thread-id <thread_id> --version-dir target/session-artifacts
+
+Attaches a daemon run_id to an existing persisted Codex thread through thread/resume.
+"#;
+
+pub(crate) const SESSION_INTERRUPT_AFTER_HELP: &str = r#"Examples:
+  codex-app session interrupt --run-id <run_id>
+
+Interrupts the current active turn through turn/interrupt using the run's thread_id and turn_id. The run remains available for session send or execute.
+"#;
+
+pub(crate) const SESSION_LIST_AFTER_HELP: &str = r#"Examples:
+  codex-app session list
+  codex-app session list --threads --limit 5
+
+Output:
+  runs                  In-memory daemon runs with snapshots.
+  threads               Recent persisted Codex threads when --threads is set.
+"#;
+
+pub(crate) const SESSION_WATCH_AFTER_HELP: &str = r#"Examples:
+  codex-app session watch --run-id <run_id>
+  codex-app session watch --run-id <run_id> --jsonl --interval-ms 1000
+
+Polls daemon events and snapshots until the run is no longer running. This is a snapshot-based MVP, not a push stream.
+"#;
+
+pub(crate) const SESSION_EVENTS_AFTER_HELP: &str = r#"Examples:
+  codex-app session events --run-id <run_id>
+  codex-app session events --run-id <run_id> --since 42
+
+Returns normalized daemon events with seq greater than --since.
 "#;
 
 pub(crate) const DAEMON_AFTER_HELP: &str = r#"Examples:

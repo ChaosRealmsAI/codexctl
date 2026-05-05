@@ -11,9 +11,10 @@ use anyhow::Result;
 use clap::Parser;
 use serde_json::json;
 
-use cli::{Cli, Commands};
+use cli::{Cli, Commands, DaemonCommand};
 use commands::{
-    build_answer, compact_thread_read, initialized_server, run_doctor, run_goal, run_plan,
+    build_answer, compact_thread_read, initialized_server, run_account, run_doctor, run_goal,
+    run_models, run_plan, run_quota,
 };
 use methods::KNOWN_METHODS;
 use session::{default_socket_path, run_daemon_command, run_session_command};
@@ -39,6 +40,34 @@ fn main() -> Result<()> {
         Commands::Features => {
             let mut server = initialized_server(&codex_bin, codex_home, log_dir, log_mode)?;
             print_json(server.call("experimentalFeature/list", json!({}), false)?)
+        }
+        Commands::Account => {
+            let mut server = initialized_server(&codex_bin, codex_home, log_dir, log_mode)?;
+            print_json(run_account(&mut server)?)
+        }
+        Commands::Quota => {
+            let mut server = initialized_server(&codex_bin, codex_home, log_dir, log_mode)?;
+            print_json(run_quota(&mut server)?)
+        }
+        Commands::Models => {
+            let mut server = initialized_server(&codex_bin, codex_home, log_dir, log_mode)?;
+            print_json(run_models(&mut server)?)
+        }
+        Commands::Status => {
+            let daemon = run_daemon_command(socket_path, DaemonCommand::Status)?;
+            let mut server = initialized_server(&codex_bin, codex_home, log_dir, log_mode)?;
+            let account = run_account(&mut server)?;
+            let quota = run_quota(&mut server)?;
+            let models = run_models(&mut server)?;
+            print_json(json!({
+                "ok": true,
+                "daemon": daemon,
+                "account": account.get("account").cloned().unwrap_or_default(),
+                "rate_limits": quota.get("rate_limits").cloned().unwrap_or_default(),
+                "models": models.get("models").cloned().unwrap_or_default(),
+                "codex_home": server.codex_home,
+                "log_path": server.log_path(),
+            }))
         }
         Commands::Read(args) => {
             let mut server = initialized_server(&codex_bin, codex_home, log_dir, log_mode)?;

@@ -56,6 +56,10 @@ codex-app doctor
 codex-app methods
 codex-app modes
 codex-app features
+codex-app account
+codex-app quota
+codex-app models
+codex-app status
 codex-app read --thread-id <thread-id> --compact
 codex-app --codex-home ~/.codex-work read --thread-id <thread-id> --compact
 ```
@@ -102,14 +106,24 @@ codex-app session start \
   --detach
 
 codex-app session read --run-id <run-id>
+codex-app session watch --run-id <run-id> --jsonl
+codex-app session events --run-id <run-id> --since 0
+codex-app session list --threads
 
 codex-app session answer \
   --run-id <run-id> \
-  --answer 'scope=A Small plan (Recommended)'
+  --pick recommended
 
 codex-app session send \
   --run-id <run-id> \
   --prompt "I confirm this plan. Continue."
+
+codex-app session execute \
+  --run-id <run-id> \
+  --detach
+
+codex-app session resume --thread-id <thread-id>
+codex-app session interrupt --run-id <run-id>
 
 codex-app session read --run-id <run-id>
 codex-app session stop --run-id <run-id>
@@ -124,6 +138,30 @@ Use `--detach` on `session start`, `session answer`, or `session send` when the
 caller wants to return immediately and poll `session read` for an in-progress
 snapshot. Snapshot responses include `status`, `current_phase`, `elapsed_ms`,
 `questions`, `agent_deltas`, `agent_messages`, `plans`, `usage`, and errors.
+Use `--pick recommended`, `--pick first`, or `--pick 1,2,1` to answer pending
+structured questions without copying exact option labels.
+
+Generic run artifacts:
+
+```bash
+codex-app session start \
+  --prompt-file input.md \
+  --version-dir target/session-artifacts \
+  --dangerously-full-access \
+  --detach
+```
+
+This writes under:
+
+```text
+<version-dir>/codex-app-runs/<run-id>/
+  input.md
+  latest.json
+  run.json
+  events.jsonl
+  result.json
+  result.md
+```
 
 Highest local authority:
 
@@ -204,10 +242,13 @@ off
 most useful to automation:
 
 - app-server health
+- account, quota, and model discovery
 - collaboration modes
 - thread Goal
 - Plan turns
 - CLI-only multi-round session runs
+- snapshot watch/events/list
+- default-mode execute and turn interrupt
 - structured question answering
 - high-permission execution switch
 - logs and summaries

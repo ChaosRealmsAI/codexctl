@@ -81,6 +81,14 @@ pub enum Commands {
         after_help = help::FEATURES_AFTER_HELP
     )]
     Features,
+    #[command(about = "Read Codex account information", after_help = help::ACCOUNT_AFTER_HELP)]
+    Account,
+    #[command(about = "Read Codex quota and rate limit status", after_help = help::QUOTA_AFTER_HELP)]
+    Quota,
+    #[command(about = "List Codex models and supported reasoning efforts", after_help = help::MODELS_AFTER_HELP)]
+    Models,
+    #[command(about = "Show daemon, account, quota, and model status", after_help = help::STATUS_AFTER_HELP)]
+    Status,
     #[command(
         about = "Read an app-server thread, optionally including turns",
         after_help = help::READ_AFTER_HELP
@@ -230,6 +238,7 @@ pub struct PlanArgs {
     pub question_mode: QuestionMode,
     #[arg(
         long,
+        visible_alias = "reasoning-effort",
         value_enum,
         default_value_t = Effort::Medium,
         help = "Reasoning effort sent in Plan collaboration settings"
@@ -268,8 +277,38 @@ pub enum SessionCommand {
         after_help = help::SESSION_SEND_AFTER_HELP
     )]
     Send(SessionSendArgs),
+    #[command(
+        about = "Execute the approved plan in default collaboration mode",
+        after_help = help::SESSION_EXECUTE_AFTER_HELP
+    )]
+    Execute(SessionExecuteArgs),
+    #[command(
+        about = "Attach daemon state to an existing Codex thread",
+        after_help = help::SESSION_RESUME_AFTER_HELP
+    )]
+    Resume(SessionResumeArgs),
+    #[command(
+        about = "Interrupt the current turn without removing the run",
+        after_help = help::SESSION_INTERRUPT_AFTER_HELP
+    )]
+    Interrupt(SessionRunIdArgs),
+    #[command(
+        about = "List daemon runs, optionally with recent persisted Codex threads",
+        after_help = help::SESSION_LIST_AFTER_HELP
+    )]
+    List(SessionListArgs),
     #[command(about = "Read in-memory run state from the daemon")]
     Read(SessionRunIdArgs),
+    #[command(
+        about = "Poll a run snapshot until it pauses or completes",
+        after_help = help::SESSION_WATCH_AFTER_HELP
+    )]
+    Watch(SessionWatchArgs),
+    #[command(
+        about = "Read normalized daemon events for a run",
+        after_help = help::SESSION_EVENTS_AFTER_HELP
+    )]
+    Events(SessionEventsArgs),
     #[command(about = "Stop one run and release its app-server process")]
     Stop(SessionRunIdArgs),
 }
@@ -307,7 +346,7 @@ pub struct SessionStartArgs {
         help = "Goal token budget used only when --objective is set"
     )]
     pub token_budget: TokenBudget,
-    #[arg(long, value_enum, default_value_t = Effort::Medium)]
+    #[arg(long, visible_alias = "reasoning-effort", value_enum, default_value_t = Effort::Medium)]
     pub effort: Effort,
     #[arg(long, help = "Override model used in collaborationMode settings")]
     pub model: Option<String>,
@@ -323,6 +362,12 @@ pub struct SessionStartArgs {
         help = "Return after submitting the turn so session read can snapshot it while running"
     )]
     pub detach: bool,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Write generic codex-app run artifacts under DIR/codex-app-runs/<run-id>"
+    )]
+    pub version_dir: Option<PathBuf>,
     #[command(flatten)]
     pub runtime: RuntimeArgs,
 }
@@ -345,6 +390,12 @@ pub struct SessionAnswerArgs {
     #[arg(long, help = "File containing raw answers JSON object")]
     pub answers_file: Option<PathBuf>,
     #[arg(
+        long,
+        conflicts_with_all = ["answers", "answers_json", "answers_file"],
+        help = "Answer pending questions by option index list, first, or recommended"
+    )]
+    pub pick: Option<String>,
+    #[arg(
         long = "timeout",
         visible_alias = "timeout-secs",
         default_value_t = RunTimeout::Unlimited,
@@ -356,6 +407,12 @@ pub struct SessionAnswerArgs {
         help = "Return after submitting the answer so session read can snapshot it while running"
     )]
     pub detach: bool,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Bind or update generic codex-app artifacts directory for this run"
+    )]
+    pub version_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -366,7 +423,7 @@ pub struct SessionSendArgs {
     pub prompt: Option<String>,
     #[arg(long, help = "File containing the follow-up prompt")]
     pub prompt_file: Option<PathBuf>,
-    #[arg(long, value_enum, default_value_t = Effort::Medium)]
+    #[arg(long, visible_alias = "reasoning-effort", value_enum, default_value_t = Effort::Medium)]
     pub effort: Effort,
     #[arg(long, help = "Override model used in collaborationMode settings")]
     pub model: Option<String>,
@@ -382,6 +439,103 @@ pub struct SessionSendArgs {
         help = "Return after submitting the prompt so session read can snapshot it while running"
     )]
     pub detach: bool,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Bind or update generic codex-app artifacts directory for this run"
+    )]
+    pub version_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionExecuteArgs {
+    #[arg(long, help = "Run id returned by codex-app session start or resume")]
+    pub run_id: String,
+    #[arg(long, conflicts_with = "prompt_file", help = "Inline execution prompt")]
+    pub prompt: Option<String>,
+    #[arg(long, help = "File containing the execution prompt")]
+    pub prompt_file: Option<PathBuf>,
+    #[arg(long, visible_alias = "reasoning-effort", value_enum, default_value_t = Effort::Medium)]
+    pub effort: Effort,
+    #[arg(long, help = "Override model used in collaborationMode settings")]
+    pub model: Option<String>,
+    #[arg(
+        long = "timeout",
+        visible_alias = "timeout-secs",
+        default_value_t = RunTimeout::Unlimited,
+        help = "Maximum wait time for this session command to pause: seconds or unlimited"
+    )]
+    pub timeout: RunTimeout,
+    #[arg(
+        long,
+        help = "Return after submitting the execution turn so session read can snapshot it while running"
+    )]
+    pub detach: bool,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Bind or update generic codex-app artifacts directory for this run"
+    )]
+    pub version_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionResumeArgs {
+    #[arg(long, help = "Existing Codex app-server thread id to attach")]
+    pub thread_id: String,
+    #[arg(long, value_enum, default_value_t = Effort::Medium, visible_alias = "reasoning-effort")]
+    pub effort: Effort,
+    #[arg(long, help = "Override model used for future turns")]
+    pub model: Option<String>,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Write generic codex-app run artifacts under DIR/codex-app-runs/<run-id>"
+    )]
+    pub version_dir: Option<PathBuf>,
+    #[command(flatten)]
+    pub runtime: RuntimeArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionListArgs {
+    #[arg(
+        long,
+        help = "Also include recent persisted app-server threads from thread/list"
+    )]
+    pub threads: bool,
+    #[arg(
+        long,
+        default_value_t = 20,
+        help = "Maximum persisted threads to return with --threads"
+    )]
+    pub limit: usize,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionWatchArgs {
+    #[arg(long, help = "Run id returned by codex-app session start or resume")]
+    pub run_id: String,
+    #[arg(
+        long,
+        default_value_t = 1000,
+        help = "Polling interval in milliseconds"
+    )]
+    pub interval_ms: u64,
+    #[arg(long, help = "Print each snapshot as JSONL while polling")]
+    pub jsonl: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionEventsArgs {
+    #[arg(long, help = "Run id returned by codex-app session start or resume")]
+    pub run_id: String,
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Only return events with seq greater than this value"
+    )]
+    pub since: u64,
 }
 
 #[derive(Debug, Args)]
@@ -687,6 +841,39 @@ mod tests {
             panic!("expected session start command");
         };
         assert!(args.detach);
+    }
+
+    #[test]
+    fn parses_session_answer_pick_and_execute_aliases() {
+        let answer = Cli::try_parse_from([
+            "codex-app",
+            "session",
+            "answer",
+            "--run-id",
+            "run-1",
+            "--pick",
+            "recommended",
+        ])
+        .unwrap();
+        let Commands::Session(SessionCommand::Answer(args)) = answer.command else {
+            panic!("expected session answer command");
+        };
+        assert_eq!(args.pick.as_deref(), Some("recommended"));
+
+        let execute = Cli::try_parse_from([
+            "codex-app",
+            "session",
+            "execute",
+            "--run-id",
+            "run-1",
+            "--reasoning-effort",
+            "high",
+        ])
+        .unwrap();
+        assert!(matches!(
+            execute.command,
+            Commands::Session(SessionCommand::Execute(_))
+        ));
     }
 
     #[test]

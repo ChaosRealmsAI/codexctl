@@ -109,6 +109,68 @@ pub(crate) fn run_goal(server: &mut AppServer, command: GoalCommand) -> Result<V
     }
 }
 
+pub(crate) fn run_account(server: &mut AppServer) -> Result<Value> {
+    let response = server.call("account/read", json!({}), false)?;
+    let account = response
+        .pointer("/result/account")
+        .cloned()
+        .unwrap_or(Value::Null);
+    Ok(json!({
+        "ok": response.get("error").is_none(),
+        "account": account,
+        "codex_home": server.codex_home,
+        "log_path": server.log_path(),
+        "raw": response,
+    }))
+}
+
+pub(crate) fn run_quota(server: &mut AppServer) -> Result<Value> {
+    let response = server.call("account/rateLimits/read", json!({}), false)?;
+    let rate_limits = response
+        .pointer("/result/rateLimits")
+        .cloned()
+        .unwrap_or(Value::Null);
+    Ok(json!({
+        "ok": response.get("error").is_none(),
+        "rate_limits": rate_limits,
+        "codex_home": server.codex_home,
+        "log_path": server.log_path(),
+        "raw": response,
+    }))
+}
+
+pub(crate) fn run_models(server: &mut AppServer) -> Result<Value> {
+    let response = server.call("model/list", json!({}), false)?;
+    let models = response
+        .pointer("/result/data")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|model| {
+            json!({
+                "id": model.get("id").cloned().unwrap_or(Value::Null),
+                "model": model.get("model").cloned().unwrap_or(Value::Null),
+                "display_name": model.get("displayName").cloned().unwrap_or(Value::Null),
+                "description": model.get("description").cloned().unwrap_or(Value::Null),
+                "is_default": model.get("isDefault").cloned().unwrap_or(Value::Bool(false)),
+                "hidden": model.get("hidden").cloned().unwrap_or(Value::Bool(false)),
+                "default_reasoning_effort": model.get("defaultReasoningEffort").cloned().unwrap_or(Value::Null),
+                "supported_reasoning_efforts": model.get("supportedReasoningEfforts").cloned().unwrap_or(Value::Array(Vec::new())),
+                "input_modalities": model.get("inputModalities").cloned().unwrap_or(Value::Array(Vec::new())),
+                "upgrade": model.get("upgrade").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(json!({
+        "ok": response.get("error").is_none(),
+        "models": models,
+        "codex_home": server.codex_home,
+        "log_path": server.log_path(),
+        "raw": response,
+    }))
+}
+
 pub(crate) fn run_plan(server: &mut AppServer, args: PlanArgs) -> Result<Value> {
     let prompt = read_prompt(args.prompt, args.prompt_file)?;
     let runtime = args.runtime.effective()?;
