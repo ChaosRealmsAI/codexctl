@@ -65,6 +65,15 @@ Install and project:
   One-command install    curl -fsSL https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.sh | sh
   Pinned release         cargo install --git https://github.com/ChaosRealmsAI/codexctl --tag v0.1.0 --force
 
+Workflow chooser:
+  doctor                 First command on a machine; proves Codex app-server starts.
+  models                 Check available model ids and supported reasoning efforts before hardcoding automation.
+  quota                  Check account limits before starting long or parallel runs.
+  goal set/get/clear     Store a durable objective on a thread. Use before long work so later turns know what "done" means.
+  plan                   One-shot Plan-mode turn. Best for smoke tests, quick design, or a single structured question cycle.
+  session                Multi-turn CLI flow. Best for app integrations, plan confirmation, request_user_input, execute, resume, and inspect.
+  raw                    Escape hatch for app-server methods not wrapped by codexctl.
+
 Global options:
   --codex-bin <path>     Codex executable or wrapper. Use for a different installed binary. Default: codex.
   --codex-home <dir>     Optional Codex account/config/session home. Use for another account/session directory.
@@ -77,6 +86,26 @@ Global options:
 Highest permission mode:
   --dangerously-full-access is an alias for --full-auto.
   It starts the Codex thread with sandbox=danger-full-access and approvalPolicy=never.
+
+Permission chooser:
+  read-only              Default. Use for account checks, thread reads, planning, and audits that must not edit files.
+  workspace-write        Use when Codex should edit files inside the workspace but not have unrestricted local access.
+  danger-full-access     Use only for trusted local automation that may need broad filesystem/process access.
+  --full-auto            Shortcut for sandbox=danger-full-access and approvalPolicy=never.
+  --dangerously-full-access
+                          Alias for --full-auto.
+
+Model and reasoning chooser:
+  List current choices first:
+       codexctl models
+
+  Default model          Let Codex choose the account default when you do not pass --model.
+  --model <id>           Pin a model for reproducible automation, for example gpt-5.5 or gpt-5.3-codex-spark.
+  --effort medium        Default balance for everyday planning and coding.
+  --effort low           Faster, cheaper turns for simple checks and short replies.
+  --effort high          More reasoning for nontrivial implementation or debugging.
+  --effort xhigh         Use for hard architecture, large refactors, or long-running autonomous work.
+  --reasoning-effort     Alias for --effort on commands that support it.
 
 Multiple Codex accounts or installs:
   A shell alias like `CODEX_HOME=$HOME/.codex-work codex` becomes:
@@ -161,6 +190,22 @@ pub(crate) const MODELS_AFTER_HELP: &str = r#"Examples:
 
 Output:
   ok, models, codex_home, log_path, and raw model/list response.
+
+Use when:
+  Before hardcoding --model in scripts or apps.
+  Before choosing --effort / --reasoning-effort for a run.
+  When a different Codex account home may expose different defaults or limits.
+
+How to apply a model:
+  codexctl plan --model gpt-5.5 --effort high --prompt-file input.md
+  codexctl session start --model gpt-5.3-codex-spark --effort medium --prompt-file input.md
+  codexctl session execute --run-id <run_id> --model gpt-5.5 --reasoning-effort xhigh
+
+Reasoning guidance:
+  low                    Fast and light. Use for small checks and short answers.
+  medium                 Default. Use for normal planning and coding.
+  high                   Deeper reasoning. Use for debugging, implementation, and review.
+  xhigh                  Maximum local reasoning. Use for hard architecture, risky refactors, and long runs.
 "#;
 
 pub(crate) const STATUS_AFTER_HELP: &str = r#"Examples:
@@ -218,6 +263,20 @@ Goal behavior:
   `--token-budget unlimited` leaves the goal uncapped and does not send tokenBudget to app-server.
   `--dangerously-full-access` is available when a new thread must be created.
   `--codex-home <dir>` selects a Codex account/config/session directory. When omitted, the wrapper clears CODEX_HOME so Codex uses its own default home.
+
+Use Goal when:
+  You want a durable objective attached to a thread across multiple turns.
+  A caller will later resume, inspect, execute, or ask whether the work is complete.
+  You want a token budget cap or an explicit unlimited budget recorded at the thread level.
+
+Do not use Goal for:
+  A one-off account check, model list, quota check, or raw protocol probe.
+  A tiny prompt where the objective is already fully contained in that prompt.
+
+Typical sequence:
+  codexctl goal set --objective "Ship the CLI help update" --token-budget unlimited --dangerously-full-access
+  codexctl plan --objective "Design the CLI help update" --prompt-file input.md
+  codexctl session start --objective "Implement and verify the approved plan" --prompt-file input.md --dangerously-full-access
 "#;
 
 pub(crate) const GOAL_SET_AFTER_HELP: &str = r#"Examples:
@@ -242,6 +301,11 @@ Parameters:
   --full-auto            Highest permission shortcut: sandbox=danger-full-access and approvalPolicy=never.
   --dangerously-full-access
                           Alias for --full-auto.
+
+When to use:
+  Use `goal set` before a long session or implementation run when the run needs a stable definition of done.
+  Use --thread-id to attach a goal to an existing thread.
+  Omit --thread-id when you want codexctl to create a new thread and return its resume_command.
 
 Output:
   thread_id, thread_path, codex_home, resume_command, set/get payloads, and log_path.
@@ -276,6 +340,15 @@ Effect:
 
 pub(crate) const PLAN_AFTER_HELP: &str = r#"What it does:
   Starts a Codex app-server thread, optionally sets a Goal, then sends one turn/start using collaborationMode plan.
+
+Use Plan mode when:
+  You need a plan, architecture sketch, review, or structured request_user_input question before editing.
+  You want a one-shot smoke test for Goal + Plan + question handling.
+  A human or app should approve the plan before a default-mode execution turn.
+
+Do not use one-shot plan when:
+  The caller needs many turns, answer/confirm/execute cycles, or durable inspection by run id.
+  In those cases use `codexctl session start`, then `session answer`, `session send`, and `session execute`.
 
 Examples:
   codexctl plan --prompt "Enter Plan mode. Ask one structured question first." --question-mode fail
@@ -322,6 +395,19 @@ Parameters:
   --full-auto            Highest permission shortcut: sandbox=danger-full-access and approvalPolicy=never.
   --dangerously-full-access
                           Alias for --full-auto.
+
+Model and effort:
+  --model <id>           Pin a model from `codexctl models`, for example gpt-5.5.
+  --effort medium        Default. Good for normal plans.
+  --effort high          Use for architecture, complex debugging, or implementation plans.
+  --effort xhigh         Use for hard, ambiguous, or high-risk planning.
+  --reasoning-effort     Alias for --effort.
+
+Permissions:
+  read-only              Default and recommended for pure planning.
+  workspace-write        Use if the planning turn may need to inspect generated local artifacts or prepare files.
+  --dangerously-full-access
+                          Use only when you trust the run and want no local permission prompts.
 
 Question modes:
   auto-recommended       Selects the option label containing "(Recommended)", then falls back to the first option.
@@ -383,6 +469,11 @@ Boundary:
 "#;
 
 pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
+Use Session mode when:
+  A caller can only invoke CLI commands but needs a long-lived multi-turn Codex run.
+  You need structured question delivery, answer by run_id, plan confirmation, execution, interrupt, resume, or JSONL viewing.
+  You want app integration behavior without entering the Codex TUI.
+
   1. Start a run. The daemon keeps app-server alive and returns when a question or completion appears:
        codexctl session start --prompt-file input.md --dangerously-full-access
 
@@ -426,15 +517,32 @@ Run response fields:
 
 Use `session` rather than one-shot `plan` for app integrations that need question answering, plan confirmation, execution, or later inspection.
 The caller only uses CLI commands. The local daemon is an implementation detail and is auto-started by session commands.
+
+Model, effort, and permissions:
+  session start          Accepts --model, --effort/--reasoning-effort, --sandbox, --approval-policy, and --dangerously-full-access.
+  session send           Accepts --model and --effort for follow-up turns.
+  session execute        Accepts --model and --effort for implementation turns.
+  session resume         Accepts --model, --effort, and runtime permission flags for future turns.
+  Planning only          Prefer read-only or workspace-write.
+  Implementation         Use workspace-write or --dangerously-full-access when trusted automation must edit files.
 "#;
 
 pub(crate) const SESSION_START_AFTER_HELP: &str = r#"Examples:
   codexctl session start --prompt-file input.md --dangerously-full-access
   codexctl session start --prompt-file input.md --dangerously-full-access --detach
   codexctl session start --objective "Plan the feature" --token-budget unlimited --timeout unlimited --prompt "Ask one question first."
+  codexctl session start --model gpt-5.5 --effort high --prompt-file input.md
+  codexctl session start --sandbox workspace-write --approval-policy never --prompt-file input.md
 
 Parameters:
   --detach               Return immediately after submitting turn/start. Use `codexctl view --run-id <run_id>` while the daemon is alive, or `codexctl view <thread_path>` as the durable fallback.
+  --model <id>           Optional model id from `codexctl models`.
+  --effort <effort>      Reasoning effort: low, medium, high, or xhigh for most current Codex models.
+  --reasoning-effort     Alias for --effort.
+  --sandbox <mode>       read-only, workspace-write, or danger-full-access.
+  --approval-policy <p>  untrusted, on-failure, on-request, or never.
+  --dangerously-full-access
+                          Highest trusted local automation mode.
 
 Output:
   run_id                 Stable id for future CLI calls.
@@ -467,21 +575,42 @@ pub(crate) const SESSION_SEND_AFTER_HELP: &str = r#"Examples:
   codexctl session send --run-id <run_id> --prompt "I confirm this plan. Continue."
   codexctl session send --run-id <run_id> --prompt "I confirm this plan. Continue." --detach
   codexctl session send --run-id <run_id> --prompt-file follow-up.md --timeout unlimited
+  codexctl session send --run-id <run_id> --model gpt-5.5 --effort high --prompt "Revise the plan."
 
 Use this for normal multi-turn conversation on the same run after a turn completes. Add --detach when the caller wants to return immediately and inspect progress with `codexctl view --run-id`. If the daemon no longer knows the run_id, open the printed thread_path with `codexctl view <thread_path>`.
+
+Model and effort:
+  Use --model to change the model for this follow-up turn.
+  Use --effort or --reasoning-effort to choose reasoning depth for this follow-up turn.
 "#;
 
 pub(crate) const SESSION_EXECUTE_AFTER_HELP: &str = r#"Examples:
   codexctl session execute --run-id <run_id> --detach
   codexctl session execute --run-id <run_id> --prompt "Implement the approved plan."
+  codexctl session execute --run-id <run_id> --model gpt-5.5 --effort xhigh --detach
 
 Use this after a plan is approved. It starts a default-mode turn on the same run and may modify files according to Codex permissions. If no prompt is supplied, codexctl sends a small default implementation prompt.
+
+When to use:
+  After the human or caller has accepted the Plan-mode output.
+  When Codex should switch from planning to default-mode implementation.
+  When file edits are expected, make sure the original run was started with workspace-write or --dangerously-full-access.
+
+Model and effort:
+  medium                 Default for normal implementation.
+  high                   Use for debugging, tests, and multi-file changes.
+  xhigh                  Use for hard architecture changes, risky migrations, or long autonomous execution.
 "#;
 
 pub(crate) const SESSION_RESUME_AFTER_HELP: &str = r#"Examples:
   codexctl session resume --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
+  codexctl session resume --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --model gpt-5.5 --effort high
 
 Attaches a daemon run_id to an existing persisted Codex thread through thread/resume.
+
+Use this when:
+  The daemon was restarted but the Codex thread still exists.
+  You want to continue a persisted thread through the session command family.
 "#;
 
 pub(crate) const SESSION_INTERRUPT_AFTER_HELP: &str = r#"Examples:

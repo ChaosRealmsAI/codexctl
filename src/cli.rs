@@ -271,10 +271,14 @@ pub struct PlanArgs {
         visible_alias = "reasoning-effort",
         value_enum,
         default_value_t = Effort::Medium,
-        help = "Reasoning effort sent in Plan collaboration settings"
+        help = "Reasoning effort sent in Plan collaboration settings",
+        long_help = "Reasoning effort sent in Plan collaboration settings. Use medium for normal plans, high for architecture/debugging plans, and xhigh for hard or risky planning."
     )]
     pub effort: Effort,
-    #[arg(long, help = "Override model used in collaborationMode settings")]
+    #[arg(
+        long,
+        help = "Override model used in collaborationMode settings; run `codexctl models` first"
+    )]
     pub model: Option<String>,
     #[arg(long, help = "Write events as JSONL while running")]
     pub jsonl: bool,
@@ -364,9 +368,18 @@ pub struct SessionStartArgs {
         help = "Goal token budget used only when --objective is set"
     )]
     pub token_budget: TokenBudget,
-    #[arg(long, visible_alias = "reasoning-effort", value_enum, default_value_t = Effort::Medium)]
+    #[arg(
+        long,
+        visible_alias = "reasoning-effort",
+        value_enum,
+        default_value_t = Effort::Medium,
+        help = "Reasoning effort for this session turn: low, medium, high, or xhigh"
+    )]
     pub effort: Effort,
-    #[arg(long, help = "Override model used in collaborationMode settings")]
+    #[arg(
+        long,
+        help = "Override model used in collaborationMode settings; run `codexctl models` first"
+    )]
     pub model: Option<String>,
     #[arg(
         long = "timeout",
@@ -429,9 +442,18 @@ pub struct SessionSendArgs {
     pub prompt: Option<String>,
     #[arg(long, help = "File containing the follow-up prompt")]
     pub prompt_file: Option<PathBuf>,
-    #[arg(long, visible_alias = "reasoning-effort", value_enum, default_value_t = Effort::Medium)]
+    #[arg(
+        long,
+        visible_alias = "reasoning-effort",
+        value_enum,
+        default_value_t = Effort::Medium,
+        help = "Reasoning effort for this follow-up turn: low, medium, high, or xhigh"
+    )]
     pub effort: Effort,
-    #[arg(long, help = "Override model used in collaborationMode settings")]
+    #[arg(
+        long,
+        help = "Override model used in collaborationMode settings; run `codexctl models` first"
+    )]
     pub model: Option<String>,
     #[arg(
         long = "timeout",
@@ -455,9 +477,18 @@ pub struct SessionExecuteArgs {
     pub prompt: Option<String>,
     #[arg(long, help = "File containing the execution prompt")]
     pub prompt_file: Option<PathBuf>,
-    #[arg(long, visible_alias = "reasoning-effort", value_enum, default_value_t = Effort::Medium)]
+    #[arg(
+        long,
+        visible_alias = "reasoning-effort",
+        value_enum,
+        default_value_t = Effort::Medium,
+        help = "Reasoning effort for this execution turn: low, medium, high, or xhigh"
+    )]
     pub effort: Effort,
-    #[arg(long, help = "Override model used in collaborationMode settings")]
+    #[arg(
+        long,
+        help = "Override model used in collaborationMode settings; run `codexctl models` first"
+    )]
     pub model: Option<String>,
     #[arg(
         long = "timeout",
@@ -477,9 +508,18 @@ pub struct SessionExecuteArgs {
 pub struct SessionResumeArgs {
     #[arg(long, help = "Existing Codex app-server thread id to attach")]
     pub thread_id: String,
-    #[arg(long, value_enum, default_value_t = Effort::Medium, visible_alias = "reasoning-effort")]
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = Effort::Medium,
+        visible_alias = "reasoning-effort",
+        help = "Reasoning effort for future turns on this resumed run"
+    )]
     pub effort: Effort,
-    #[arg(long, help = "Override model used for future turns")]
+    #[arg(
+        long,
+        help = "Override model used for future turns; run `codexctl models` first"
+    )]
     pub model: Option<String>,
     #[command(flatten)]
     pub runtime: RuntimeArgs,
