@@ -2,15 +2,19 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
   1. Check that Codex app-server can start:
        codexctl doctor
 
-  2. Discover app-server protocol names:
+  2. Install or update codexctl from the public repository:
+       curl -fsSL https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.sh | sh
+       cargo install --git https://github.com/ChaosRealmsAI/codexctl --tag v0.1.0 --force
+
+  3. Discover app-server protocol names:
        codexctl methods
        codexctl modes
        codexctl features
 
-  3. Read an existing app-server thread from the default Codex home:
+  4. Read an existing app-server thread from the default Codex home:
        codexctl read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
 
-  4. Run one-shot Plan mode with a Goal, unlimited goal budget, unlimited runtime wait, and highest local permission:
+  5. Run one-shot Plan mode with a Goal, unlimited goal budget, unlimited runtime wait, and highest local permission:
        codexctl plan --objective "Validate Goal, Plan mode, and structured questions" --token-budget unlimited --timeout unlimited --prompt-file input.md --dangerously-full-access --question-mode auto-recommended
 
      For app integrations that need multiple turns, structured answers, plan confirmation, or execution, prefer:
@@ -19,13 +23,13 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
        codexctl session send --run-id <run_id> --prompt "I confirm this plan."
        codexctl session execute --run-id <run_id>
 
-  5. Select a different Codex install or account directory only when needed:
+  6. Select a different Codex install or account directory only when needed:
        codexctl --codex-bin /path/to/codex doctor
        codexctl --codex-home ~/.codex-work doctor
        codexctl --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
        codexctl --codex-home ~/.codex-personal read --thread-id <thread_id> --compact
 
-  6. Inspect command-specific help before wiring an app:
+  7. Inspect command-specific help before wiring an app:
        codexctl account --help
        codexctl quota --help
        codexctl models --help
@@ -55,6 +59,11 @@ Help forms:
   Top-level via help     codexctl help <command>
   Session subcommand     codexctl session <subcommand> --help
   Session via help       codexctl session help <subcommand>
+
+Install and project:
+  Repository             https://github.com/ChaosRealmsAI/codexctl
+  One-command install    curl -fsSL https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.sh | sh
+  Pinned release         cargo install --git https://github.com/ChaosRealmsAI/codexctl --tag v0.1.0 --force
 
 Global options:
   --codex-bin <path>     Codex executable or wrapper. Use for a different installed binary. Default: codex.
