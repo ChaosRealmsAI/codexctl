@@ -18,9 +18,16 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
        codex-app --codex-home ~/.codex-personal read --thread-id <thread_id> --compact
 
   6. Inspect command-specific help before wiring an app:
+       codex-app account --help
+       codex-app quota --help
+       codex-app models --help
+       codex-app status --help
        codex-app plan --help
        codex-app session --help
        codex-app session start --help
+       codex-app session answer --help
+       codex-app session execute --help
+       codex-app session watch --help
        codex-app goal --help
        codex-app goal set --help
        codex-app read --help
@@ -307,21 +314,30 @@ Use with plan --question-mode external when another process wants to build the r
 "#;
 
 pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
-  1. Start a run. The daemon keeps app-server alive and returns when a question or completion appears.
-       codex-app session start --prompt-file input.md --dangerously-full-access
+  1. Start a run. The daemon keeps app-server alive and returns when a question or completion appears:
+       codex-app session start --prompt-file input.md --dangerously-full-access --version-dir target/session-artifacts
 
-     For in-progress snapshots, detach after submit and poll session read:
+     For in-progress snapshots, detach after submit and watch/read snapshots:
        codex-app session start --prompt-file input.md --dangerously-full-access --detach
+       codex-app session watch --run-id <run_id> --jsonl
        codex-app session read --run-id <run_id>
 
   2. Answer a structured question by run id.
        codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
+       codex-app session answer --run-id <run_id> --pick recommended
 
   3. Send a normal follow-up on the same run, for example plan confirmation.
        codex-app session send --run-id <run_id> --prompt "I confirm this plan. Continue."
 
-  4. Read or stop the run.
+  4. Execute the approved plan in default collaboration mode.
+       codex-app session execute --run-id <run_id> --detach
+
+  5. Inspect, resume, interrupt, or stop runs.
+       codex-app session list --threads
        codex-app session read --run-id <run_id>
+       codex-app session events --run-id <run_id> --since 0
+       codex-app session resume --thread-id <thread_id>
+       codex-app session interrupt --run-id <run_id>
        codex-app session stop --run-id <run_id>
 
 Return types:
@@ -336,6 +352,9 @@ Snapshot fields:
   elapsed_ms             Milliseconds since run creation.
   questions              Pending structured questions when status=needs_input.
   agent_deltas           Text deltas collected so far while status=running.
+  event_seq/events_count Event cursor and count for session events/watch callers.
+  version_dir/artifact_dir
+                          Generic artifacts directory when --version-dir is set.
 
 The caller only uses CLI commands. The local daemon is an implementation detail and is auto-started by session commands.
 "#;
@@ -344,9 +363,11 @@ pub(crate) const SESSION_START_AFTER_HELP: &str = r#"Examples:
   codex-app session start --prompt-file input.md --dangerously-full-access
   codex-app session start --prompt-file input.md --dangerously-full-access --detach
   codex-app session start --objective "Plan the feature" --token-budget unlimited --timeout unlimited --prompt "Ask one question first."
+  codex-app session start --prompt-file input.md --version-dir target/session-artifacts --dangerously-full-access --detach
 
 Parameters:
   --detach               Return immediately after submitting turn/start. Use session read to snapshot status while Codex is still running.
+  --version-dir <dir>    Write input.md, latest.json, run.json, events.jsonl, result.json, and result.md under <dir>/codex-app-runs/<run_id>/.
 
 Output:
   run_id                 Stable id for future CLI calls.
@@ -359,8 +380,18 @@ Output:
 
 pub(crate) const SESSION_ANSWER_AFTER_HELP: &str = r#"Examples:
   codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
+  codex-app session answer --run-id <run_id> --pick recommended
+  codex-app session answer --run-id <run_id> --pick first
+  codex-app session answer --run-id <run_id> --pick 1,2,1
   codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)" --detach
   codex-app session answer --run-id <run_id> --answers-json '{"scope":{"answers":["A Small plan (Recommended)"]}}'
+
+Parameters:
+  --answer               Exact QUESTION_ID=SELECTED_LABEL answer. Repeat for multiple questions.
+  --pick recommended     Select the option label containing "(Recommended)" for every pending question.
+  --pick first           Select the first option for every pending question.
+  --pick 1,2,1           Select option indexes by pending-question order.
+  --version-dir <dir>    Bind or update the run artifact directory.
 
 Output:
   Same shape as session start. Without --detach, it returns after the next question or completion. With --detach, it returns after submitting the answer.
