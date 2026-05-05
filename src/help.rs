@@ -1,45 +1,59 @@
 pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
   1. Check that Codex app-server can start:
-       codex-app doctor
+       codexctl doctor
 
   2. Discover app-server protocol names:
-       codex-app methods
-       codex-app modes
-       codex-app features
+       codexctl methods
+       codexctl modes
+       codexctl features
 
   3. Read an existing app-server thread from the default Codex home:
-       codex-app read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
+       codexctl read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
 
   4. Run Plan mode with a Goal, unlimited goal budget, unlimited runtime wait, and highest local permission:
-       codex-app plan --objective "Validate Goal, Plan mode, and structured questions" --token-budget unlimited --timeout unlimited --prompt-file input.md --dangerously-full-access --question-mode auto-recommended
+       codexctl plan --objective "Validate Goal, Plan mode, and structured questions" --token-budget unlimited --timeout unlimited --prompt-file input.md --dangerously-full-access --question-mode auto-recommended
 
   5. Select a different Codex install or account directory only when needed:
-       codex-app --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
-       codex-app --codex-home ~/.codex-personal read --thread-id <thread_id> --compact
+       codexctl --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
+       codexctl --codex-home ~/.codex-personal read --thread-id <thread_id> --compact
 
   6. Inspect command-specific help before wiring an app:
-       codex-app account --help
-       codex-app quota --help
-       codex-app models --help
-       codex-app status --help
-       codex-app plan --help
-       codex-app session --help
-       codex-app session start --help
-       codex-app session answer --help
-       codex-app session execute --help
-       codex-app session watch --help
-       codex-app goal --help
-       codex-app goal set --help
-       codex-app read --help
-       codex-app raw --help
+       codexctl account --help
+       codexctl quota --help
+       codexctl models --help
+       codexctl status --help
+       codexctl plan --help
+       codexctl session --help
+       codexctl session start --help
+       codexctl session answer --help
+       codexctl session execute --help
+       codexctl session watch --help
+       codexctl goal --help
+       codexctl goal set --help
+       codexctl read --help
+       codexctl raw --help
+
+Command index:
+  Health/account         doctor, account, quota, models, status
+  Protocol discovery     methods, modes, features, raw
+  Threads/goals          read, goal set, goal get, goal clear
+  One-shot planning      plan, answer
+  Long sessions          session start, answer, send, execute, read, watch, events, list, resume, interrupt, stop
+  Daemon debugging       daemon status, daemon start, daemon stop
+
+Help forms:
+  Top-level command      codexctl <command> --help
+  Top-level via help     codexctl help <command>
+  Session subcommand     codexctl session <subcommand> --help
+  Session via help       codexctl session help <subcommand>
 
 Global options:
   --codex-bin <path>     Codex executable. Default: codex.
   --codex-home <dir>     Optional Codex account/config/session home. Default: cleared for the spawned Codex process, so Codex uses its normal default home.
   --account-home <dir>   Alias for --codex-home.
-  --log-dir <dir>        Fixed JSONL log directory. Example: target/codex-app-logs.
+  --log-dir <dir>        Fixed JSONL log directory. Example: target/codexctl-logs.
   --log-mode <mode>      off disables logs, summary writes compact protocol summaries, full writes full JSON messages.
-  --session-socket <p>   Unix socket for CLI-only long sessions. Default: /tmp/codex-app-<user>.sock.
+  --session-socket <p>   Unix socket for CLI-only long sessions. Default: /tmp/codexctl-<user>.sock.
 
 Highest permission mode:
   --dangerously-full-access is an alias for --full-auto.
@@ -47,9 +61,9 @@ Highest permission mode:
 "#;
 
 pub(crate) const DOCTOR_AFTER_HELP: &str = r#"Examples:
-  codex-app doctor
-  codex-app --codex-bin /opt/homebrew/bin/codex --log-dir target/codex-app-logs doctor
-  codex-app --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
+  codexctl doctor
+  codexctl --codex-bin /opt/homebrew/bin/codex --log-dir target/codexctl-logs doctor
+  codexctl --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
 
 What it checks:
   --codex-bin            Executable used for `codex --version` and `codex app-server`.
@@ -66,18 +80,18 @@ Output:
 "#;
 
 pub(crate) const METHODS_AFTER_HELP: &str = r#"Examples:
-  codex-app methods
-  codex-app methods | jq -r '.methods[]' | rg 'thread/'
+  codexctl methods
+  codexctl methods | jq -r '.methods[]' | rg 'thread/'
 
 Output:
-  methods                Known app-server method names accepted by `codex-app raw`.
+  methods                Known app-server method names accepted by `codexctl raw`.
 
 Use this before `raw` when you need the exact protocol method name.
 "#;
 
 pub(crate) const MODES_AFTER_HELP: &str = r#"Examples:
-  codex-app modes
-  codex-app --log-mode full --log-dir target/codex-app-logs modes
+  codexctl modes
+  codexctl --log-mode full --log-dir target/codexctl-logs modes
 
 Output:
   Raw collaborationMode/list app-server response.
@@ -86,7 +100,7 @@ Use this to confirm available collaboration modes before starting turns.
 "#;
 
 pub(crate) const FEATURES_AFTER_HELP: &str = r#"Examples:
-  codex-app features
+  codexctl features
 
 Output:
   Raw experimentalFeature/list app-server response.
@@ -95,41 +109,41 @@ Use this to discover app-server feature flags exposed by the installed Codex bui
 "#;
 
 pub(crate) const ACCOUNT_AFTER_HELP: &str = r#"Examples:
-  codex-app account
-  codex-app --codex-home ~/.codex-work account
+  codexctl account
+  codexctl --codex-home ~/.codex-work account
 
 Output:
   ok, account, codex_home, log_path, and raw account/read response.
 "#;
 
 pub(crate) const QUOTA_AFTER_HELP: &str = r#"Examples:
-  codex-app quota
-  codex-app --codex-home ~/.codex-work quota
+  codexctl quota
+  codexctl --codex-home ~/.codex-work quota
 
 Output:
   ok, rate_limits, codex_home, log_path, and raw account/rateLimits/read response.
 "#;
 
 pub(crate) const MODELS_AFTER_HELP: &str = r#"Examples:
-  codex-app models
-  codex-app models | jq -r '.models[] | [.id, .is_default, .default_reasoning_effort] | @tsv'
+  codexctl models
+  codexctl models | jq -r '.models[] | [.id, .is_default, .default_reasoning_effort] | @tsv'
 
 Output:
   ok, models, codex_home, log_path, and raw model/list response.
 "#;
 
 pub(crate) const STATUS_AFTER_HELP: &str = r#"Examples:
-  codex-app status
+  codexctl status
 
 Output:
   daemon status without auto-starting the daemon, plus account, rate_limits, models, codex_home, and log_path.
 "#;
 
 pub(crate) const READ_AFTER_HELP: &str = r#"Examples:
-  codex-app read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
-  codex-app --codex-home ~/.codex-work read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
-  codex-app read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --metadata-only
-  codex-app read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
+  codexctl read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
+  codexctl --codex-home ~/.codex-work read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --compact
+  codexctl read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --metadata-only
+  codexctl read --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
 
 Parameters:
   --codex-home <dir>     Optional global account/config/session home. Default: cleared for the spawned Codex process.
@@ -146,10 +160,10 @@ Tip:
 "#;
 
 pub(crate) const RAW_AFTER_HELP: &str = r#"Examples:
-  codex-app raw model/list --params '{}'
-  codex-app --codex-home ~/.codex-work raw model/list --params '{}'
-  codex-app raw thread/read --params '{"threadId":"019df7b8-3282-7003-984e-6f95c54d9618","includeTurns":true}'
-  codex-app raw thread/read --params-file params.json --include-events
+  codexctl raw model/list --params '{}'
+  codexctl --codex-home ~/.codex-work raw model/list --params '{}'
+  codexctl raw thread/read --params '{"threadId":"019df7b8-3282-7003-984e-6f95c54d9618","includeTurns":true}'
+  codexctl raw thread/read --params-file params.json --include-events
 
 Parameters:
   --codex-home <dir>     Optional global account/config/session home. Default: cleared for the spawned Codex process.
@@ -164,9 +178,9 @@ Output:
 "#;
 
 pub(crate) const GOAL_AFTER_HELP: &str = r#"Subcommands:
-  codex-app goal set --help
-  codex-app goal get --help
-  codex-app goal clear --help
+  codexctl goal set --help
+  codexctl goal get --help
+  codexctl goal clear --help
 
 Goal behavior:
   `goal set` creates a thread if --thread-id is omitted.
@@ -176,11 +190,11 @@ Goal behavior:
 "#;
 
 pub(crate) const GOAL_SET_AFTER_HELP: &str = r#"Examples:
-  codex-app goal set --objective "Validate Goal, Plan mode, and structured questions" --token-budget unlimited --dangerously-full-access
-  codex-app --codex-home ~/.codex-work goal set --objective "Validate the work account" --token-budget unlimited
-  codex-app goal set --objective "Ship the CLI wrapper" --token-budget 6000 --full-auto
-  codex-app goal set --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --objective "Improve CLI help" --status active
-  codex-app goal set --cwd /path/to/project --sandbox read-only --approval-policy never --objective "Read-only planning"
+  codexctl goal set --objective "Validate Goal, Plan mode, and structured questions" --token-budget unlimited --dangerously-full-access
+  codexctl --codex-home ~/.codex-work goal set --objective "Validate the work account" --token-budget unlimited
+  codexctl goal set --objective "Ship the CLI wrapper" --token-budget 6000 --full-auto
+  codexctl goal set --thread-id 019df7b8-3282-7003-984e-6f95c54d9618 --objective "Improve CLI help" --status active
+  codexctl goal set --cwd /path/to/project --sandbox read-only --approval-policy never --objective "Read-only planning"
 
 Parameters:
   --codex-bin <path>     Optional global Codex executable path. Default: codex.
@@ -202,12 +216,12 @@ Output:
   thread_id, thread_path, codex_home, resume_command, set/get payloads, and log_path.
 
 Next:
-  codex-app --codex-home <codex_home> read --thread-id <thread_id> --compact
+  codexctl --codex-home <codex_home> read --thread-id <thread_id> --compact
 "#;
 
 pub(crate) const GOAL_GET_AFTER_HELP: &str = r#"Examples:
-  codex-app goal get --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
-  codex-app --codex-home ~/.codex-work goal get --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
+  codexctl goal get --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
+  codexctl --codex-home ~/.codex-work goal get --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
 
 Parameters:
   --codex-home <dir>     Optional global account/config/session home. Default: cleared for the spawned Codex process.
@@ -218,8 +232,8 @@ Output:
 "#;
 
 pub(crate) const GOAL_CLEAR_AFTER_HELP: &str = r#"Examples:
-  codex-app goal clear --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
-  codex-app --codex-home ~/.codex-work goal clear --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
+  codexctl goal clear --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
+  codexctl --codex-home ~/.codex-work goal clear --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
 
 Parameters:
   --codex-home <dir>     Optional global account/config/session home. Default: cleared for the spawned Codex process.
@@ -233,19 +247,19 @@ pub(crate) const PLAN_AFTER_HELP: &str = r#"What it does:
   Starts a Codex app-server thread, optionally sets a Goal, then sends one turn/start using collaborationMode plan.
 
 Examples:
-  codex-app plan --prompt "Enter Plan mode. Ask one structured question first." --question-mode fail
+  codexctl plan --prompt "Enter Plan mode. Ask one structured question first." --question-mode fail
 
-  codex-app plan \
+  codexctl plan \
     --objective "Validate Goal, Plan mode, and structured questions" \
     --token-budget unlimited \
     --timeout unlimited \
     --prompt-file input.md \
     --dangerously-full-access \
     --question-mode auto-recommended \
-    --log-dir target/codex-app-logs \
+    --log-dir target/codexctl-logs \
     --log-mode summary
 
-  codex-app --codex-home ~/.codex-work plan \
+  codexctl --codex-home ~/.codex-work plan \
     --objective "Validate the work account" \
     --token-budget unlimited \
     --timeout unlimited \
@@ -253,7 +267,7 @@ Examples:
     --dangerously-full-access
 
   printf '{"answers":{"scope":{"answers":["A Validate the chain first (Recommended)"]}}}\n' \
-    | codex-app plan --prompt-file input.md --question-mode external --timeout unlimited
+    | codexctl plan --prompt-file input.md --question-mode external --timeout unlimited
 
 Parameters:
   --codex-bin <path>     Optional global Codex executable path. Default: codex.
@@ -289,13 +303,13 @@ Output:
   ok, status, thread_id, turn_id, codex_home, thread_path, resume_command, goal, plans, questions, answers, usage, warnings, errors, items, and log_path.
 
 After a run:
-  codex-app --codex-home <codex_home> read --thread-id <thread_id> --compact
+  codexctl --codex-home <codex_home> read --thread-id <thread_id> --compact
 "#;
 
 pub(crate) const ANSWER_AFTER_HELP: &str = r#"Examples:
-  codex-app answer --question first_version_scope --answer "A Validate the chain first (Recommended)"
-  codex-app answer --question scope --answer "custom free-form answer"
-  codex-app answer --question scope --answer "A" --answer "B"
+  codexctl answer --question first_version_scope --answer "A Validate the chain first (Recommended)"
+  codexctl answer --question scope --answer "custom free-form answer"
+  codexctl answer --question scope --answer "A" --answer "B"
 
 Parameters:
   --question <id>        Required question id from request_user_input.
@@ -315,30 +329,30 @@ Use with plan --question-mode external when another process wants to build the r
 
 pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
   1. Start a run. The daemon keeps app-server alive and returns when a question or completion appears:
-       codex-app session start --prompt-file input.md --dangerously-full-access --version-dir target/session-artifacts
+       codexctl session start --prompt-file input.md --dangerously-full-access --version-dir target/session-artifacts
 
      For in-progress snapshots, detach after submit and watch/read snapshots:
-       codex-app session start --prompt-file input.md --dangerously-full-access --detach
-       codex-app session watch --run-id <run_id> --jsonl
-       codex-app session read --run-id <run_id>
+       codexctl session start --prompt-file input.md --dangerously-full-access --detach
+       codexctl session watch --run-id <run_id> --jsonl
+       codexctl session read --run-id <run_id>
 
   2. Answer a structured question by run id.
-       codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
-       codex-app session answer --run-id <run_id> --pick recommended
+       codexctl session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
+       codexctl session answer --run-id <run_id> --pick recommended
 
   3. Send a normal follow-up on the same run, for example plan confirmation.
-       codex-app session send --run-id <run_id> --prompt "I confirm this plan. Continue."
+       codexctl session send --run-id <run_id> --prompt "I confirm this plan. Continue."
 
   4. Execute the approved plan in default collaboration mode.
-       codex-app session execute --run-id <run_id> --detach
+       codexctl session execute --run-id <run_id> --detach
 
   5. Inspect, resume, interrupt, or stop runs.
-       codex-app session list --threads
-       codex-app session read --run-id <run_id>
-       codex-app session events --run-id <run_id> --since 0
-       codex-app session resume --thread-id <thread_id>
-       codex-app session interrupt --run-id <run_id>
-       codex-app session stop --run-id <run_id>
+       codexctl session list --threads
+       codexctl session read --run-id <run_id>
+       codexctl session events --run-id <run_id> --since 0
+       codexctl session resume --thread-id <thread_id>
+       codexctl session interrupt --run-id <run_id>
+       codexctl session stop --run-id <run_id>
 
 Return types:
   needs_input            The model asked structured request_user_input questions. Show questions to the caller, then call session answer.
@@ -360,14 +374,14 @@ The caller only uses CLI commands. The local daemon is an implementation detail 
 "#;
 
 pub(crate) const SESSION_START_AFTER_HELP: &str = r#"Examples:
-  codex-app session start --prompt-file input.md --dangerously-full-access
-  codex-app session start --prompt-file input.md --dangerously-full-access --detach
-  codex-app session start --objective "Plan the feature" --token-budget unlimited --timeout unlimited --prompt "Ask one question first."
-  codex-app session start --prompt-file input.md --version-dir target/session-artifacts --dangerously-full-access --detach
+  codexctl session start --prompt-file input.md --dangerously-full-access
+  codexctl session start --prompt-file input.md --dangerously-full-access --detach
+  codexctl session start --objective "Plan the feature" --token-budget unlimited --timeout unlimited --prompt "Ask one question first."
+  codexctl session start --prompt-file input.md --version-dir target/session-artifacts --dangerously-full-access --detach
 
 Parameters:
   --detach               Return immediately after submitting turn/start. Use session read to snapshot status while Codex is still running.
-  --version-dir <dir>    Write input.md, latest.json, run.json, events.jsonl, result.json, and result.md under <dir>/codex-app-runs/<run_id>/.
+  --version-dir <dir>    Write input.md, latest.json, run.json, events.jsonl, result.json, and result.md under <dir>/codexctl-runs/<run_id>/.
 
 Output:
   run_id                 Stable id for future CLI calls.
@@ -379,12 +393,12 @@ Output:
 "#;
 
 pub(crate) const SESSION_ANSWER_AFTER_HELP: &str = r#"Examples:
-  codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
-  codex-app session answer --run-id <run_id> --pick recommended
-  codex-app session answer --run-id <run_id> --pick first
-  codex-app session answer --run-id <run_id> --pick 1,2,1
-  codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)" --detach
-  codex-app session answer --run-id <run_id> --answers-json '{"scope":{"answers":["A Small plan (Recommended)"]}}'
+  codexctl session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
+  codexctl session answer --run-id <run_id> --pick recommended
+  codexctl session answer --run-id <run_id> --pick first
+  codexctl session answer --run-id <run_id> --pick 1,2,1
+  codexctl session answer --run-id <run_id> --answer scope="A Small plan (Recommended)" --detach
+  codexctl session answer --run-id <run_id> --answers-json '{"scope":{"answers":["A Small plan (Recommended)"]}}'
 
 Parameters:
   --answer               Exact QUESTION_ID=SELECTED_LABEL answer. Repeat for multiple questions.
@@ -398,36 +412,36 @@ Output:
 "#;
 
 pub(crate) const SESSION_SEND_AFTER_HELP: &str = r#"Examples:
-  codex-app session send --run-id <run_id> --prompt "I confirm this plan. Continue."
-  codex-app session send --run-id <run_id> --prompt "I confirm this plan. Continue." --detach
-  codex-app session send --run-id <run_id> --prompt-file follow-up.md --timeout unlimited
+  codexctl session send --run-id <run_id> --prompt "I confirm this plan. Continue."
+  codexctl session send --run-id <run_id> --prompt "I confirm this plan. Continue." --detach
+  codexctl session send --run-id <run_id> --prompt-file follow-up.md --timeout unlimited
 
 Use this for normal multi-turn conversation on the same run after a turn completes. Add --detach when a caller wants to read in-progress snapshots with session read.
 "#;
 
 pub(crate) const SESSION_EXECUTE_AFTER_HELP: &str = r#"Examples:
-  codex-app session execute --run-id <run_id> --detach
-  codex-app session execute --run-id <run_id> --prompt "Implement the approved plan."
+  codexctl session execute --run-id <run_id> --detach
+  codexctl session execute --run-id <run_id> --prompt "Implement the approved plan."
 
-Use this after a plan is approved. It starts a default-mode turn on the same run. If no prompt is supplied, codex-app sends a small default implementation prompt.
+Use this after a plan is approved. It starts a default-mode turn on the same run. If no prompt is supplied, codexctl sends a small default implementation prompt.
 "#;
 
 pub(crate) const SESSION_RESUME_AFTER_HELP: &str = r#"Examples:
-  codex-app session resume --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
-  codex-app session resume --thread-id <thread_id> --version-dir target/session-artifacts
+  codexctl session resume --thread-id 019df7b8-3282-7003-984e-6f95c54d9618
+  codexctl session resume --thread-id <thread_id> --version-dir target/session-artifacts
 
 Attaches a daemon run_id to an existing persisted Codex thread through thread/resume.
 "#;
 
 pub(crate) const SESSION_INTERRUPT_AFTER_HELP: &str = r#"Examples:
-  codex-app session interrupt --run-id <run_id>
+  codexctl session interrupt --run-id <run_id>
 
 Interrupts the current active turn through turn/interrupt using the run's thread_id and turn_id. The run remains available for session send or execute.
 "#;
 
 pub(crate) const SESSION_LIST_AFTER_HELP: &str = r#"Examples:
-  codex-app session list
-  codex-app session list --threads --limit 5
+  codexctl session list
+  codexctl session list --threads --limit 5
 
 Output:
   runs                  In-memory daemon runs with snapshots.
@@ -435,23 +449,23 @@ Output:
 "#;
 
 pub(crate) const SESSION_WATCH_AFTER_HELP: &str = r#"Examples:
-  codex-app session watch --run-id <run_id>
-  codex-app session watch --run-id <run_id> --jsonl --interval-ms 1000
+  codexctl session watch --run-id <run_id>
+  codexctl session watch --run-id <run_id> --jsonl --interval-ms 1000
 
 Polls daemon events and snapshots until the run is no longer running. This is a snapshot-based MVP, not a push stream.
 "#;
 
 pub(crate) const SESSION_EVENTS_AFTER_HELP: &str = r#"Examples:
-  codex-app session events --run-id <run_id>
-  codex-app session events --run-id <run_id> --since 42
+  codexctl session events --run-id <run_id>
+  codexctl session events --run-id <run_id> --since 42
 
 Returns normalized daemon events with seq greater than --since.
 "#;
 
 pub(crate) const DAEMON_AFTER_HELP: &str = r#"Examples:
-  codex-app daemon status
-  codex-app daemon start
-  codex-app daemon stop
+  codexctl daemon status
+  codexctl daemon start
+  codexctl daemon stop
 
 Session commands auto-start the daemon. Manual daemon commands are for debugging.
 "#;

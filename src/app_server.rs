@@ -91,8 +91,8 @@ impl AppServer {
             "initialize",
             json!({
                 "clientInfo": {
-                    "name": "codex-app-cli",
-                    "title": "codex-app CLI",
+                    "name": "codexctl",
+                    "title": "codexctl CLI",
                     "version": env!("CARGO_PKG_VERSION"),
                 },
                 "capabilities": {

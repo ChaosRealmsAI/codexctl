@@ -42,7 +42,7 @@ pub(crate) fn run_doctor(
     let modes = server.call("collaborationMode/list", json!({}), false)?;
     Ok(json!({
         "ok": version.status.success() && modes.get("error").is_none(),
-        "kind": "codex-app-cli-doctor",
+        "kind": "codexctl-doctor",
         "codex": version_json,
         "app_server": {
             "initialized": true,

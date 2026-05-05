@@ -12,9 +12,9 @@ pub const DEFAULT_TIMEOUT_SECS: u64 = 180;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "codex-app",
+    name = "codexctl",
     version,
-    about = "Codex app-server friendly CLI wrapper",
+    about = "Codex control-plane CLI for goals, plan sessions, snapshots, and app-server debugging",
     after_help = help::ROOT_AFTER_HELP
 )]
 pub struct Cli {
@@ -37,7 +37,7 @@ pub struct Cli {
     #[arg(
         long,
         global = true,
-        help = "Fixed directory for JSONL app-server logs, e.g. target/codex-app-logs"
+        help = "Fixed directory for JSONL app-server logs, e.g. target/codexctl-logs"
     )]
     pub log_dir: Option<PathBuf>,
     #[arg(
@@ -52,7 +52,7 @@ pub struct Cli {
         long,
         global = true,
         value_name = "PATH",
-        help = "Unix socket path for CLI-only long sessions; defaults to /tmp/codex-app-<user>.sock"
+        help = "Unix socket path for CLI-only long sessions; defaults to /tmp/codexctl-<user>.sock"
     )]
     pub session_socket: Option<PathBuf>,
     #[command(subcommand)]
@@ -123,7 +123,7 @@ pub enum Commands {
     Session(SessionCommand),
     #[command(
         subcommand,
-        about = "Manage the local codex-app session daemon",
+        about = "Manage the local codexctl session daemon",
         after_help = help::DAEMON_AFTER_HELP
     )]
     Daemon(DaemonCommand),
@@ -365,7 +365,7 @@ pub struct SessionStartArgs {
     #[arg(
         long,
         value_name = "DIR",
-        help = "Write generic codex-app run artifacts under DIR/codex-app-runs/<run-id>"
+        help = "Write generic codexctl run artifacts under DIR/codexctl-runs/<run-id>"
     )]
     pub version_dir: Option<PathBuf>,
     #[command(flatten)]
@@ -374,7 +374,7 @@ pub struct SessionStartArgs {
 
 #[derive(Debug, Args)]
 pub struct SessionAnswerArgs {
-    #[arg(long, help = "Run id returned by codex-app session start")]
+    #[arg(long, help = "Run id returned by codexctl session start")]
     pub run_id: String,
     #[arg(
         long = "answer",
@@ -410,14 +410,14 @@ pub struct SessionAnswerArgs {
     #[arg(
         long,
         value_name = "DIR",
-        help = "Bind or update generic codex-app artifacts directory for this run"
+        help = "Bind or update generic codexctl artifacts directory for this run"
     )]
     pub version_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
 pub struct SessionSendArgs {
-    #[arg(long, help = "Run id returned by codex-app session start")]
+    #[arg(long, help = "Run id returned by codexctl session start")]
     pub run_id: String,
     #[arg(long, conflicts_with = "prompt_file", help = "Inline follow-up prompt")]
     pub prompt: Option<String>,
@@ -442,14 +442,14 @@ pub struct SessionSendArgs {
     #[arg(
         long,
         value_name = "DIR",
-        help = "Bind or update generic codex-app artifacts directory for this run"
+        help = "Bind or update generic codexctl artifacts directory for this run"
     )]
     pub version_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
 pub struct SessionExecuteArgs {
-    #[arg(long, help = "Run id returned by codex-app session start or resume")]
+    #[arg(long, help = "Run id returned by codexctl session start or resume")]
     pub run_id: String,
     #[arg(long, conflicts_with = "prompt_file", help = "Inline execution prompt")]
     pub prompt: Option<String>,
@@ -474,7 +474,7 @@ pub struct SessionExecuteArgs {
     #[arg(
         long,
         value_name = "DIR",
-        help = "Bind or update generic codex-app artifacts directory for this run"
+        help = "Bind or update generic codexctl artifacts directory for this run"
     )]
     pub version_dir: Option<PathBuf>,
 }
@@ -490,7 +490,7 @@ pub struct SessionResumeArgs {
     #[arg(
         long,
         value_name = "DIR",
-        help = "Write generic codex-app run artifacts under DIR/codex-app-runs/<run-id>"
+        help = "Write generic codexctl run artifacts under DIR/codexctl-runs/<run-id>"
     )]
     pub version_dir: Option<PathBuf>,
     #[command(flatten)]
@@ -514,7 +514,7 @@ pub struct SessionListArgs {
 
 #[derive(Debug, Args)]
 pub struct SessionWatchArgs {
-    #[arg(long, help = "Run id returned by codex-app session start or resume")]
+    #[arg(long, help = "Run id returned by codexctl session start or resume")]
     pub run_id: String,
     #[arg(
         long,
@@ -528,7 +528,7 @@ pub struct SessionWatchArgs {
 
 #[derive(Debug, Args)]
 pub struct SessionEventsArgs {
-    #[arg(long, help = "Run id returned by codex-app session start or resume")]
+    #[arg(long, help = "Run id returned by codexctl session start or resume")]
     pub run_id: String,
     #[arg(
         long,
@@ -540,7 +540,7 @@ pub struct SessionEventsArgs {
 
 #[derive(Debug, Args)]
 pub struct SessionRunIdArgs {
-    #[arg(long, help = "Run id returned by codex-app session start")]
+    #[arg(long, help = "Run id returned by codexctl session start")]
     pub run_id: String,
 }
 
@@ -814,14 +814,14 @@ mod tests {
 
     #[test]
     fn default_codex_home_is_unset() {
-        let cli = Cli::try_parse_from(["codex-app", "doctor"]).unwrap();
+        let cli = Cli::try_parse_from(["codexctl", "doctor"]).unwrap();
         assert!(cli.codex_home.is_none());
         assert!(matches!(cli.command, Commands::Doctor));
     }
 
     #[test]
     fn parses_codex_home_alias() {
-        let cli = Cli::try_parse_from(["codex-app", "--account-home", "/tmp/codex-work", "doctor"])
+        let cli = Cli::try_parse_from(["codexctl", "--account-home", "/tmp/codex-work", "doctor"])
             .unwrap();
         assert_eq!(cli.codex_home, Some(PathBuf::from("/tmp/codex-work")));
     }
@@ -829,12 +829,7 @@ mod tests {
     #[test]
     fn parses_session_start_detach() {
         let cli = Cli::try_parse_from([
-            "codex-app",
-            "session",
-            "start",
-            "--prompt",
-            "hello",
-            "--detach",
+            "codexctl", "session", "start", "--prompt", "hello", "--detach",
         ])
         .unwrap();
         let Commands::Session(SessionCommand::Start(args)) = cli.command else {
@@ -846,7 +841,7 @@ mod tests {
     #[test]
     fn parses_session_answer_pick_and_execute_aliases() {
         let answer = Cli::try_parse_from([
-            "codex-app",
+            "codexctl",
             "session",
             "answer",
             "--run-id",
@@ -861,7 +856,7 @@ mod tests {
         assert_eq!(args.pick.as_deref(), Some("recommended"));
 
         let execute = Cli::try_parse_from([
-            "codex-app",
+            "codexctl",
             "session",
             "execute",
             "--run-id",

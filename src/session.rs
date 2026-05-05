@@ -30,7 +30,7 @@ const DEFAULT_THREAD_MODEL: &str = "gpt-5.5";
 
 pub(crate) fn default_socket_path() -> PathBuf {
     let user = std::env::var("USER").unwrap_or_else(|_| "default".to_string());
-    std::env::temp_dir().join(format!("codex-app-{user}.sock"))
+    std::env::temp_dir().join(format!("codexctl-{user}.sock"))
 }
 
 pub(crate) fn run_daemon_command(socket_path: PathBuf, command: DaemonCommand) -> Result<Value> {
@@ -257,7 +257,7 @@ fn ensure_daemon(socket_path: &Path) -> Result<Value> {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     command.process_group(0);
-    command.spawn().context("spawn codex-app daemon")?;
+    command.spawn().context("spawn codexctl daemon")?;
     for _ in 0..50 {
         thread::sleep(Duration::from_millis(100));
         if let Ok(response) = send_request(socket_path, json!({ "type": "daemon_status" })) {
@@ -1215,7 +1215,7 @@ impl RunState {
         let artifact_dir = init
             .version_dir
             .as_ref()
-            .map(|dir| dir.join("codex-app-runs").join(&init.run_id));
+            .map(|dir| dir.join("codexctl-runs").join(&init.run_id));
         Self {
             run_id: init.run_id,
             thread_id: init.thread_id,
@@ -1378,7 +1378,7 @@ impl RunState {
 
     fn set_version_dir(&mut self, version_dir: PathBuf) {
         self.version_dir = Some(version_dir.clone());
-        self.artifact_dir = Some(version_dir.join("codex-app-runs").join(&self.run_id));
+        self.artifact_dir = Some(version_dir.join("codexctl-runs").join(&self.run_id));
         self.push_event("artifacts/bound", json!({ "version_dir": version_dir }));
     }
 
@@ -1442,7 +1442,7 @@ impl RunState {
 
     fn result_markdown(&self) -> String {
         let mut text = String::new();
-        text.push_str("# codex-app run result\n\n");
+        text.push_str("# codexctl run result\n\n");
         text.push_str(&format!("- run_id: `{}`\n", self.run_id));
         text.push_str(&format!("- thread_id: `{}`\n", self.thread_id));
         text.push_str(&format!("- status: `{}`\n", self.status));

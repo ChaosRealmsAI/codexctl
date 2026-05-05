@@ -120,7 +120,7 @@ fn default_log_dir() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".codex-app-cli")
+        .join(".codexctl")
         .join("logs")
 }
 

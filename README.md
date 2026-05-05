@@ -1,8 +1,8 @@
-# codex-app-cli
+# codexctl
 
 Rust CLI wrapper around `codex app-server --listen stdio://`.
 
-The binary is `codex-app`. It speaks Codex app-server JSONL, adds stable
+The binary is `codexctl`. It speaks Codex app-server JSONL, adds stable
 high-level commands for Goal, Plan, and structured follow-up questions, and
 keeps raw access to all app-server methods through `raw`.
 
@@ -12,9 +12,9 @@ default account/config/session directory. Use explicit flags only when you need
 a different install or account:
 
 ```bash
-codex-app --codex-bin /path/to/codex doctor
-codex-app --codex-home ~/.codex-work doctor
-codex-app --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
+codexctl --codex-bin /path/to/codex doctor
+codexctl --codex-home ~/.codex-work doctor
+codexctl --codex-bin /path/to/codex --codex-home ~/.codex-work doctor
 ```
 
 ## Build
@@ -28,7 +28,7 @@ cargo build
 Default logs are written to:
 
 ```text
-~/.codex-app-cli/logs/
+~/.codexctl/logs/
 ```
 
 Each run writes:
@@ -41,9 +41,9 @@ latest.jsonl
 Log modes:
 
 ```bash
-codex-app --log-mode summary doctor
-codex-app --log-mode full doctor
-codex-app --log-mode off doctor
+codexctl --log-mode summary doctor
+codexctl --log-mode full doctor
+codexctl --log-mode off doctor
 ```
 
 `summary` keeps method names, ids, question counts, and response keys. `full`
@@ -52,81 +52,81 @@ keeps full JSON messages.
 ## Core Commands
 
 ```bash
-codex-app doctor
-codex-app methods
-codex-app modes
-codex-app features
-codex-app account
-codex-app quota
-codex-app models
-codex-app status
-codex-app read --thread-id <thread-id> --compact
-codex-app --codex-home ~/.codex-work read --thread-id <thread-id> --compact
+codexctl doctor
+codexctl methods
+codexctl modes
+codexctl features
+codexctl account
+codexctl quota
+codexctl models
+codexctl status
+codexctl read --thread-id <thread-id> --compact
+codexctl --codex-home ~/.codex-work read --thread-id <thread-id> --compact
 ```
 
 Generic method access:
 
 ```bash
-codex-app raw collaborationMode/list --params '{}'
-codex-app raw model/list --params '{}'
-codex-app raw thread/read --params '{"threadId":"...","includeTurns":true}'
+codexctl raw collaborationMode/list --params '{}'
+codexctl raw model/list --params '{}'
+codexctl raw thread/read --params '{"threadId":"...","includeTurns":true}'
 ```
 
 Goal:
 
 ```bash
-codex-app goal set --objective "Ship a small CLI" --token-budget 5000
-codex-app goal set --objective "Ship a small CLI" --token-budget unlimited
-codex-app --codex-home ~/.codex-work goal set --objective "Ship a small CLI"
-codex-app goal get --thread-id <thread-id>
-codex-app goal clear --thread-id <thread-id>
+codexctl goal set --objective "Ship a small CLI" --token-budget 5000
+codexctl goal set --objective "Ship a small CLI" --token-budget unlimited
+codexctl --codex-home ~/.codex-work goal set --objective "Ship a small CLI"
+codexctl goal get --thread-id <thread-id>
+codexctl goal clear --thread-id <thread-id>
 ```
 
 Plan mode:
 
 ```bash
-codex-app plan --prompt "Plan only. Ask one question first."
-codex-app plan --prompt-file input.md --question-mode auto-recommended
-codex-app plan --prompt-file input.md --token-budget unlimited --timeout unlimited
-codex-app --codex-home ~/.codex-work plan --prompt-file input.md --dangerously-full-access
+codexctl plan --prompt "Plan only. Ask one question first."
+codexctl plan --prompt-file input.md --question-mode auto-recommended
+codexctl plan --prompt-file input.md --token-budget unlimited --timeout unlimited
+codexctl --codex-home ~/.codex-work plan --prompt-file input.md --dangerously-full-access
 ```
 
 CLI-only long sessions:
 
 ```bash
-codex-app session start \
+codexctl session start \
   --prompt-file input.md \
   --token-budget unlimited \
   --timeout unlimited \
   --dangerously-full-access
 
-codex-app session start \
+codexctl session start \
   --prompt-file input.md \
   --dangerously-full-access \
   --detach
 
-codex-app session read --run-id <run-id>
-codex-app session watch --run-id <run-id> --jsonl
-codex-app session events --run-id <run-id> --since 0
-codex-app session list --threads
+codexctl session read --run-id <run-id>
+codexctl session watch --run-id <run-id> --jsonl
+codexctl session events --run-id <run-id> --since 0
+codexctl session list --threads
 
-codex-app session answer \
+codexctl session answer \
   --run-id <run-id> \
   --pick recommended
 
-codex-app session send \
+codexctl session send \
   --run-id <run-id> \
   --prompt "I confirm this plan. Continue."
 
-codex-app session execute \
+codexctl session execute \
   --run-id <run-id> \
   --detach
 
-codex-app session resume --thread-id <thread-id>
-codex-app session interrupt --run-id <run-id>
+codexctl session resume --thread-id <thread-id>
+codexctl session interrupt --run-id <run-id>
 
-codex-app session read --run-id <run-id>
-codex-app session stop --run-id <run-id>
+codexctl session read --run-id <run-id>
+codexctl session stop --run-id <run-id>
 ```
 
 `session` commands auto-start a local daemon and communicate through a Unix
@@ -144,7 +144,7 @@ structured questions without copying exact option labels.
 Generic run artifacts:
 
 ```bash
-codex-app session start \
+codexctl session start \
   --prompt-file input.md \
   --version-dir target/session-artifacts \
   --dangerously-full-access \
@@ -154,7 +154,7 @@ codex-app session start \
 This writes under:
 
 ```text
-<version-dir>/codex-app-runs/<run-id>/
+<version-dir>/codexctl-runs/<run-id>/
   input.md
   latest.json
   run.json
@@ -166,7 +166,7 @@ This writes under:
 Highest local authority:
 
 ```bash
-codex-app plan --prompt-file input.md --dangerously-full-access
+codexctl plan --prompt-file input.md --dangerously-full-access
 ```
 
 `--dangerously-full-access` is an alias for `--full-auto`. Both map to:
@@ -178,7 +178,7 @@ approvalPolicy = never
 
 ## Structured Questions
 
-When Codex emits `item/tool/requestUserInput`, `codex-app plan` can handle it:
+When Codex emits `item/tool/requestUserInput`, `codexctl plan` can handle it:
 
 ```text
 auto-recommended  choose option label containing "(Recommended)"
@@ -191,7 +191,7 @@ fail              return needs_input in the final JSON
 Build an answer payload:
 
 ```bash
-codex-app answer \
+codexctl answer \
   --question first_version_scope \
   --answer "A Validate the chain first (Recommended)"
 ```
@@ -213,7 +213,7 @@ External mode answer format:
 Use explicit unlimited values when automation should not cap a run:
 
 ```bash
-codex-app plan \
+codexctl plan \
   --objective "Validate Goal, Plan mode, and structured questions" \
   --token-budget unlimited \
   --timeout unlimited \
@@ -238,7 +238,7 @@ off
 
 ## Design Boundary
 
-`codex-app` intentionally exposes only stable typed commands for the workflows
+`codexctl` intentionally exposes only stable typed commands for the workflows
 most useful to automation:
 
 - app-server health
@@ -260,8 +260,8 @@ All other app-server APIs are still available through `raw <method> --params`.
 For app-server-created sessions, prefer:
 
 ```bash
-codex-app read --thread-id <thread-id> --compact
-codex-app --codex-home ~/.codex-work read --thread-id <thread-id> --compact
+codexctl read --thread-id <thread-id> --compact
+codexctl --codex-home ~/.codex-work read --thread-id <thread-id> --compact
 ```
 
 `codex resume` is a TUI command and is not the primary verification path for
