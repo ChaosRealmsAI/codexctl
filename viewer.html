@@ -267,6 +267,67 @@
     background: var(--bg2);
     color: var(--text);
   }
+  .msg-agent.md-content {
+    white-space: normal;
+  }
+  .msg-agent.md-content h1,
+  .msg-agent.md-content h2,
+  .msg-agent.md-content h3,
+  .msg-agent.md-content h4 {
+    margin: 10px 0 6px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .msg-agent.md-content h1 { font-size: 18px; }
+  .msg-agent.md-content h2 { font-size: 16px; color: var(--green); }
+  .msg-agent.md-content h3,
+  .msg-agent.md-content h4 { font-size: 14px; }
+  .msg-agent.md-content p { margin: 6px 0; }
+  .msg-agent.md-content p:first-child,
+  .msg-agent.md-content h1:first-child,
+  .msg-agent.md-content h2:first-child,
+  .msg-agent.md-content h3:first-child,
+  .msg-agent.md-content h4:first-child { margin-top: 0; }
+  .msg-agent.md-content p:last-child,
+  .msg-agent.md-content ul:last-child,
+  .msg-agent.md-content ol:last-child,
+  .msg-agent.md-content pre:last-child { margin-bottom: 0; }
+  .msg-agent.md-content ul,
+  .msg-agent.md-content ol { margin: 7px 0 7px 22px; padding: 0; }
+  .msg-agent.md-content li { margin: 3px 0; }
+  .msg-agent.md-content code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg3);
+    padding: 1.5px 5px;
+    color: var(--amber);
+    border: 1px solid var(--border);
+  }
+  .msg-agent.md-content pre {
+    background: var(--bg3);
+    padding: 11px 13px;
+    overflow-x: auto;
+    margin: 10px 0;
+    border-left: 2px solid var(--border-strong);
+    white-space: pre;
+  }
+  .msg-agent.md-content pre code {
+    background: transparent;
+    padding: 0;
+    border: 0;
+    color: var(--text);
+    font-size: 12px;
+  }
+  .msg-agent.md-content blockquote {
+    margin: 8px 0;
+    padding: 7px 12px;
+    border-left: 2px solid var(--border-strong);
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .msg-agent.md-content strong { color: var(--text); font-weight: 600; }
+  .msg-agent.md-content em { color: var(--text-dim); }
+  .msg-agent.md-content a { color: var(--blue); text-decoration: none; border-bottom: 1px solid rgba(96, 165, 250, 0.4); }
   .msg-agent.intermediate {
     background: var(--bg2);
     color: var(--text-dim);
@@ -583,6 +644,76 @@
     overflow: auto;
   }
 
+  /* GOAL bar — 顶部高优先级 */
+  .goal-bar {
+    margin: 14px 0 18px;
+    padding: 14px 18px;
+    background: linear-gradient(90deg, rgba(167, 139, 250, 0.12), rgba(251, 191, 36, 0.06));
+    border-left: 3px solid var(--purple);
+  }
+  .goal-bar-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--purple);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .goal-status {
+    padding: 2px 8px;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    background: var(--purple-soft);
+    color: var(--purple);
+  }
+  .goal-status.achieved, .goal-status.complete { background: var(--green-soft); color: var(--green); }
+  .goal-status.unmet, .goal-status.failed { background: rgba(248,113,113,0.1); color: var(--red); }
+  .goal-status.budget_limited { background: var(--amber-soft); color: var(--amber); }
+  .goal-status.cleared { background: rgba(255,255,255,0.04); color: var(--text-faint); }
+  .goal-objective {
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+  .goal-budget-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .goal-budget-bar {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.04);
+    overflow: hidden;
+  }
+  .goal-budget-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--purple), var(--amber));
+  }
+  .goal-budget-fill.over { background: var(--red); }
+
+  /* update_goal function call */
+  .update-goal-card {
+    background: var(--purple-soft);
+    border-left: 2px solid var(--purple);
+    padding: 9px 14px;
+    margin: 8px 0;
+    font-size: 12.5px;
+  }
+  .update-goal-card b {
+    color: var(--purple);
+    font-size: 10.5px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
   /* ANSWERS rollup */
   .answers-card {
     border-left: 2px solid var(--green);
@@ -653,6 +784,52 @@
     overflow: auto;
   }
 
+  /* stats grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    margin-top: 18px;
+    border: 1px solid var(--border);
+  }
+  .stat-cell {
+    background: var(--bg2);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .stat-label {
+    font-size: 9.5px;
+    color: var(--text-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.1;
+  }
+  .stat-value.purple { color: var(--purple); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.blue { color: var(--blue); }
+  .stat-sub {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    line-height: 1.3;
+  }
+
+  @media (max-width: 720px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
   /* file metadata bar */
   .file-meta {
     display: flex;
@@ -668,6 +845,38 @@
   }
   .file-meta .k { color: var(--text-faint); }
   .file-meta .v { color: var(--text); }
+
+  /* language toggle (top right) */
+  .lang-toggle {
+    position: fixed;
+    top: 16px;
+    right: 18px;
+    display: flex;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    z-index: 100;
+    font-family: var(--mono);
+    font-size: 11px;
+    user-select: none;
+  }
+  .lang-toggle button {
+    padding: 5px 10px;
+    background: transparent;
+    color: var(--text-faint);
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    transition: all 150ms;
+  }
+  .lang-toggle button.active {
+    background: var(--purple-soft);
+    color: var(--purple);
+  }
+  .lang-toggle button:hover:not(.active) {
+    color: var(--text);
+    background: rgba(255,255,255,0.04);
+  }
 
   /* compacted */
   .compact-mark {
@@ -706,43 +915,183 @@
 </style>
 </head>
 <body>
+<div class="lang-toggle">
+  <button id="lang-en" class="active" onclick="setLang('en')">EN</button>
+  <button id="lang-cn" onclick="setLang('cn')">中</button>
+</div>
 <div class="wrap">
   <div class="header">
-    <div class="eyebrow">codex session viewer</div>
-    <h1 class="h1 placeholder" id="title">未加载 — 选择 / 拖入 jsonl 文件</h1>
+    <div class="eyebrow" data-i18n="eyebrow">codex session viewer</div>
+    <h1 class="h1 placeholder" id="title" data-i18n="not_loaded">Not loaded — pick or drop a jsonl file</h1>
     <div class="meta-row" id="meta"></div>
     <div class="stats" id="stats"></div>
     <div class="token-bar"><div class="token-fill" id="token-fill" style="width: 0%"></div></div>
     <div class="token-label">
-      <span id="token-text">tokens —</span>
+      <span id="token-text" data-i18n="tokens_label">tokens —</span>
       <span id="window-text"></span>
     </div>
+    <div class="stats-grid" id="stats-grid"></div>
   </div>
 
   <label class="picker" id="picker">
     <input type="file" id="file">
-    <div>选 / 拖入 Codex JSONL 文件</div>
-    <div class="hint">~/.codex/sessions/**/rollout-*.jsonl</div>
+    <div data-i18n="picker_main">Pick or drop a Codex JSONL file</div>
+    <div class="hint" data-i18n="picker_hint">~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</div>
   </label>
 
   <div id="file-meta-bar"></div>
   <div id="timeline"></div>
 
-  <div class="legend" id="legend">
-    <span><code>USER</code> 用户消息(剥离注入)</span>
-    <span><code>PLAN</code> 计划草案 / proposed_plan</span>
-    <span><code>QUESTIONS</code> 反问 + 答案</span>
-    <span><code>TODO</code> codex 内部步骤</span>
-    <span><code>PATCH</code> 文件改动</span>
-    <span><code>SHELL</code> 命令 + 输出</span>
-    <span><code>REASONING</code> 内心戏(默认折叠)</span>
-  </div>
+  <div class="legend" id="legend"></div>
 </div>
 
 <script>
 'use strict';
 
 const $ = (id) => document.getElementById(id);
+
+// ============== i18n ==============
+const I18N = {
+  en: {
+    eyebrow: 'codex session viewer',
+    not_loaded: 'Not loaded — pick or drop a jsonl file',
+    picker_main: 'Pick or drop a Codex JSONL file',
+    picker_hint: '~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl  ·  ~/.codex-app-cli/logs/*.jsonl',
+    tokens_label: 'tokens —',
+    legend_user_kind: 'USER', legend_user: 'user message · injections stripped',
+    legend_goal_kind: 'GOAL', legend_goal: 'goal + budget',
+    legend_plan_kind: 'PLAN', legend_plan: 'proposed_plan',
+    legend_q_kind: 'QUESTIONS', legend_q: 'reflexive + answers',
+    legend_todo_kind: 'TODO', legend_todo: 'codex internal plan steps',
+    legend_patch_kind: 'PATCH', legend_patch: 'file changes',
+    legend_shell_kind: 'SHELL', legend_shell: 'command + output',
+    legend_reasoning_kind: 'REASONING', legend_reasoning: 'hidden by default',
+    stat_duration: 'duration', stat_tokens: 'tokens', stat_model: 'model',
+    stat_goal_status: 'goal status', stat_commands: 'commands',
+    stat_files: 'files changed', stat_qa: 'reflexive Q&A', stat_plans: 'plans',
+    no_tokens_event: 'no token_count event', no_goal_set: 'no goal set',
+    rounds_answered: 'rounds answered', todo_updates: 'todo updates',
+    cmds_ok: 'ok', patches_word: 'patches', lines_word: 'lines',
+    final_label: 'CODEX · FINAL', codex_label: 'codex',
+    user_label: 'USER',
+    plan_proposed: '📋 PROPOSED PLAN', plan_item: '📋 PLAN ITEM',
+    answer_label: 'answer',
+    reflexive_q_header: '↳ Reflexive Questions',
+    todo_header: '▤ TODO',
+    todo_steps: 'steps',
+    update_goal_label: '🎯 codex update_goal',
+    goal_label: '🎯 GOAL',
+    goal_pursuing: 'PURSUING',
+    goal_budget_limited: 'BUDGET LIMITED',
+    over_budget: 'over budget',
+    unlimited_budget: 'unlimited',
+    reasoning_word: 'reasoning',
+    parse_error: 'JSON parse error',
+    empty_file: 'Empty file or no valid JSON lines',
+    unrecognized_events: 'unrecognized events shown as raw',
+    codex_injected_full: 'codex injected: AGENTS.md + environment_context',
+    env_context_injection: 'environment_context injection',
+    codex_system_injection: 'codex system injection',
+    plan_mode_protocol: 'plan mode protocol prompt',
+    permissions_prompt: 'permissions prompt',
+    developer_message: 'developer message',
+    injected_fold_label: 'codex injected: AGENTS.md / environment / instructions',
+    turn_word: 'turn',
+    fm_file: 'file', fm_lines: 'lines', fm_events: 'events',
+    fm_parse_err: 'parse err', fm_size: 'size', fm_types: 'types',
+    daemon_log_prefix: 'daemon log',
+    cmd_truncated: '...(truncated)',
+    plan_active_question: 'plan mode 等 PM 输入',
+    turns_word: 'turns', goals_word: 'goals', updates_word: 'updates',
+    questions_word: 'questions', plans_word: 'plans',
+    todo_word: 'todo', cmds_word: 'cmds', reasoning_chip: 'reasoning',
+    pure_inject: '(pure injection)',
+    other_input: 'or custom answer',
+  },
+  cn: {
+    eyebrow: 'codex 会话查看器',
+    not_loaded: '未加载 — 选择或拖入 jsonl 文件',
+    picker_main: '选择或拖入 Codex JSONL 文件',
+    picker_hint: '~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl  ·  ~/.codex-app-cli/logs/*.jsonl',
+    tokens_label: 'token —',
+    legend_user_kind: 'USER', legend_user: '用户消息 · 已剥离注入',
+    legend_goal_kind: 'GOAL', legend_goal: 'goal + 预算',
+    legend_plan_kind: 'PLAN', legend_plan: '计划草案',
+    legend_q_kind: 'QUESTIONS', legend_q: '反问 + 答案',
+    legend_todo_kind: 'TODO', legend_todo: 'codex 内部步骤',
+    legend_patch_kind: 'PATCH', legend_patch: '文件改动',
+    legend_shell_kind: 'SHELL', legend_shell: '命令 + 输出',
+    legend_reasoning_kind: 'REASONING', legend_reasoning: '默认折叠',
+    stat_duration: '时长', stat_tokens: 'token', stat_model: '模型',
+    stat_goal_status: 'goal 状态', stat_commands: '命令',
+    stat_files: '改动文件', stat_qa: '反问轮次', stat_plans: '计划',
+    no_tokens_event: '无 token_count 事件', no_goal_set: '未设 goal',
+    rounds_answered: '轮已答', todo_updates: '次 todo 更新',
+    cmds_ok: '成功', patches_word: '次改动', lines_word: '行',
+    final_label: 'CODEX · 最终', codex_label: 'codex',
+    user_label: '用户',
+    plan_proposed: '📋 计划草案', plan_item: '📋 计划',
+    answer_label: '答案',
+    reflexive_q_header: '↳ 反问',
+    todo_header: '▤ TODO',
+    todo_steps: '步',
+    update_goal_label: '🎯 codex 判定 goal',
+    goal_label: '🎯 GOAL',
+    goal_pursuing: '进行中',
+    goal_budget_limited: '超预算',
+    over_budget: '超预算',
+    unlimited_budget: '无上限',
+    reasoning_word: '内心戏',
+    parse_error: 'JSON 解析失败',
+    empty_file: '文件为空或没有有效 JSON 行',
+    unrecognized_events: '未识别事件 · 已 raw 显示',
+    codex_injected_full: 'codex 注入: AGENTS.md + 环境上下文',
+    env_context_injection: '环境上下文注入',
+    codex_system_injection: 'codex 系统注入',
+    plan_mode_protocol: 'plan mode 协议提示',
+    permissions_prompt: 'permissions 提示',
+    developer_message: 'developer 消息',
+    injected_fold_label: 'codex 注入: AGENTS.md / 环境 / 指令',
+    turn_word: '回合',
+    fm_file: '文件', fm_lines: '行', fm_events: '事件',
+    fm_parse_err: '解析错', fm_size: '大小', fm_types: '类型',
+    daemon_log_prefix: 'daemon 日志',
+    cmd_truncated: '...(已截断)',
+    plan_active_question: 'plan mode 等 PM 输入',
+    turns_word: '回合', goals_word: 'goals', updates_word: '次判定',
+    questions_word: '反问', plans_word: '计划',
+    todo_word: 'todo', cmds_word: '命令', reasoning_chip: '内心戏',
+    pure_inject: '(纯注入)',
+    other_input: '或自定义答案',
+  }
+};
+
+let LANG = localStorage.getItem('codexctl-viewer-lang') || 'en';
+function t(key) { return I18N[LANG]?.[key] ?? I18N.en[key] ?? key; }
+function setLang(lang) {
+  if (!I18N[lang]) return;
+  LANG = lang;
+  localStorage.setItem('codexctl-viewer-lang', lang);
+  $('lang-en').classList.toggle('active', lang === 'en');
+  $('lang-cn').classList.toggle('active', lang === 'cn');
+  applyStaticI18n();
+  if (LAST_PROCESSED) processSession(LAST_PROCESSED.text, LAST_PROCESSED.name);
+}
+function applyStaticI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = t(key);
+  });
+  // legend
+  const lg = $('legend');
+  if (lg) {
+    const items = ['user','goal','plan','q','todo','patch','shell','reasoning'];
+    lg.innerHTML = items.map(k =>
+      `<span><code>${t('legend_'+k+'_kind')}</code> ${t('legend_'+k)}</span>`
+    ).join('');
+  }
+}
+let LAST_PROCESSED = null;
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 
 function normalizeSourceInfo(source) {
@@ -827,8 +1176,21 @@ function renderMarkdown(md) {
   html = html.replace(/^###\s+(.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^##\s+(.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
+  // blockquote
+  html = html.replace(/((?:^&gt;\s+.+\n?)+)/gm, (block) => {
+    const lines = block.trim().split(/\n/).map(l => l.replace(/^&gt;\s+/, '')).join('<br>');
+    return `<blockquote>${lines}</blockquote>`;
+  });
   // bold
   html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  // emphasis
+  html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  // links (escaped text and URL stay escaped; unsafe protocols are rendered as text)
+  html = html.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (_, text, href) => {
+    const decoded = href.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    if (!/^(https?:\/\/|mailto:|#|\/)/i.test(decoded)) return `${text} (${href})`;
+    return `<a href="${href}" target="_blank" rel="noreferrer">${text}</a>`;
+  });
   // bullet list
   html = html.replace(/((?:^[ ]*[-*]\s+.+\n?)+)/gm, (block) => {
     const items = block.trim().split(/\n/).filter(Boolean).map(l => `<li>${l.replace(/^[ ]*[-*]\s+/, '')}</li>`).join('');
@@ -860,7 +1222,7 @@ const INJECT_TAGS = [
   'user_instructions',
   'collaboration_mode',
   'subagent_notification',
-  'untrusted_objective',
+  // 注: untrusted_objective 不剥离 · viewer 专门渲染 goal 卡片
   'turn_aborted',
   'permissions_instructions',
   'current_objective',
@@ -923,7 +1285,7 @@ function renderQuestions(questions, answersForTurn) {
         <div class="q-options">${opts}</div>
       </div>`;
   }).join('');
-  return `<div class="qs-card"><div class="qs-header">↳ 反问 · ${questions.length} 题</div>${html}</div>`;
+  return `<div class="qs-card"><div class="qs-header">${t('reflexive_q_header')} · ${questions.length}</div>${html}</div>`;
 }
 
 // ============== RENDER UPDATE_PLAN (TODO) ==============
@@ -943,7 +1305,7 @@ function renderUpdatePlan(args) {
   const expl = explanation ? `<div class="todo-explanation">${escapeHtml(explanation)}</div>` : '';
   return `
     <div class="todo-card">
-      <div class="todo-header">▤ TODO · ${plan.length} 步</div>
+      <div class="todo-header">${t('todo_header')} · ${plan.length} ${t('todo_steps')}</div>
       ${expl}
       <div class="todo-list">${items}</div>
     </div>`;
@@ -962,7 +1324,7 @@ function renderPatch(ev) {
     const tagCls = ['add', 'update', 'delete', 'rename'].includes(action) ? action : 'update';
     const content = info.content || info.diff || '';
     const lines = content.split('\n').length;
-    const meta = `${lines} 行`;
+    const meta = `${lines} ${t('lines_word')}`;
     return `
       <details class="patch">
         <summary>
@@ -1033,17 +1395,17 @@ function renderTimeline(events) {
     if (ev._parseError) {
       blocks.push(`
         <div class="alert">
-          <b>⚠ JSON 解析失败</b> · ${escapeHtml(ev._err)}
+          <b>⚠ ${t('parse_error')}</b> · ${escapeHtml(ev._err)}
           <pre style="margin-top:6px;font-size:11px;color:var(--text-faint);white-space:pre-wrap;word-break:break-all">${escapeHtml(ev._raw)}</pre>
         </div>`);
       continue;
     }
 
-    const t = ev.type;
+    const evType = ev.type;
     const p = ev.payload || {};
 
     // turn boundary
-    if (t === 'turn_context') {
+    if (evType === 'turn_context') {
       const turnId = p.turn_id || '';
       const mode = p.collaboration_mode?.mode || 'default';
       if (turnId !== curTurn) {
@@ -1059,13 +1421,13 @@ function renderTimeline(events) {
       continue;
     }
 
-    if (t === 'compacted') {
+    if (evType === 'compacted') {
       blocks.push('<div class="compact-mark">context compacted</div>');
       continue;
     }
 
     // ============ response_item ============
-    if (t === 'response_item') {
+    if (evType === 'response_item') {
       const ptype = p.type;
 
       // user message — 剥离注入
@@ -1076,9 +1438,9 @@ function renderTimeline(events) {
         // 全注入消息 (real 为空) → 折叠成一行, 不占主流
         if (!real) {
           const label = fullText.includes('<turn_aborted>') ? 'turn aborted'
-                      : fullText.includes('AGENTS.md instructions') ? 'codex 注入 AGENTS.md + 环境上下文'
-                      : fullText.includes('<environment_context>') ? '环境上下文注入'
-                      : 'codex 系统注入';
+                      : fullText.includes('AGENTS.md instructions') ? 'codex injected: AGENTS.md + environment_context'
+                      : fullText.includes('<environment_context>') ? 'environment_context injection'
+                      : 'codex system injection';
           blocks.push(`
             <details class="injected-block">
               <summary>${escapeHtml(label)} (${(injected.length / 1024).toFixed(1)} KB)</summary>
@@ -1103,13 +1465,46 @@ function renderTimeline(events) {
         continue;
       }
 
-      // developer message — 全折叠
+      // developer message — 大多数折叠, untrusted_objective 渲染成 goal 卡片
       if (ptype === 'message' && p.role === 'developer') {
         const txt = (p.content || []).map(c => c.text || '').join('');
-        if (txt.length < 30) continue; // 跳过太短的
-        const label = txt.includes('<collaboration_mode>') ? 'plan mode 协议提示'
-                    : txt.includes('<permissions') ? 'permissions 提示'
-                    : 'developer 消息';
+        if (txt.length < 30) continue;
+
+        // 识别 goal 设置 (untrusted_objective + Budget 块)
+        if (txt.includes('<untrusted_objective>')) {
+          const objMatch = txt.match(/<untrusted_objective>([\s\S]+?)<\/untrusted_objective>/);
+          const objective = objMatch ? objMatch[1].trim() : '';
+          const tu = +(txt.match(/Tokens used:\s*(\d+)/)?.[1] || 0);
+          const tb_raw = txt.match(/Token budget:\s*(\w+)/)?.[1] || 'unlimited';
+          const tb = (tb_raw === 'unlimited' || tb_raw === 'none') ? null : +tb_raw;
+          const time_s = +(txt.match(/Time spent pursuing goal:\s*(\d+)/)?.[1] || 0);
+          const over = tb && tu > tb;
+          const pct = tb ? Math.min(100, (tu / tb) * 100) : 0;
+          const budgetLabel = tb
+            ? `${tu.toLocaleString()} / ${tb.toLocaleString()} tokens${over ? ' · ' + t('over_budget') : ''}`
+            : `${tu.toLocaleString()} tokens · ${t('unlimited_budget')}`;
+          const status = over ? 'budget_limited' : 'pursuing';
+          const statusLabel = over ? t('goal_budget_limited') : t('goal_pursuing');
+          blocks.push(`
+            <div class="goal-bar">
+              <div class="goal-bar-head">
+                <span>${t('goal_label')}</span>
+                <span class="goal-status ${status}">${statusLabel}</span>
+                ${time_s > 0 ? `<span style="margin-left:auto;color:var(--text-faint);font-size:10.5px;font-family:var(--mono)">${time_s}s</span>` : ''}
+              </div>
+              <div class="goal-objective">${escapeHtml(objective)}</div>
+              <div class="goal-budget-row">
+                <span>${escapeHtml(budgetLabel)}</span>
+                ${tb ? `<div class="goal-budget-bar"><div class="goal-budget-fill ${over ? 'over' : ''}" style="width:${pct}%"></div></div><span>${pct.toFixed(0)}%</span>` : ''}
+              </div>
+            </div>`);
+          continue;
+        }
+
+        // 其他 developer 消息折叠
+        const label = txt.includes('<collaboration_mode>') ? 'plan mode protocol prompt'
+                    : txt.includes('<permissions') ? 'permissions prompt'
+                    : 'developer message';
         blocks.push(`
           <details class="injected-block">
             <summary>${escapeHtml(label)} (${(txt.length / 1024).toFixed(1)} KB)</summary>
@@ -1140,7 +1535,7 @@ function renderTimeline(events) {
               <div class="avatar agent">🤖</div>
               <div class="msg-col">
                 <div class="msg-meta">${meta}</div>
-                <div class="msg-agent ${cls}">${escapeHtml(rest)}</div>
+                <div class="msg-agent ${cls} md-content">${renderMarkdown(rest)}</div>
               </div>
             </div>`);
         }
@@ -1177,6 +1572,23 @@ function renderTimeline(events) {
             const cmd = (args.command || []).join(' ');
             pendingExec.set(p.call_id, cmd);
           } catch (e) {}
+        } else if (name === 'update_goal') {
+          try {
+            const args = JSON.parse(p.arguments || '{}');
+            const status = args.status || '?';
+            const reason = args.reason || '';
+            const cls = status === 'achieved' ? 'achieved'
+                      : status === 'unmet' || status === 'budget_limited' ? status
+                      : 'pursuing';
+            blocks.push(`
+              <div class="update-goal-card">
+                <b>${t('update_goal_label')}</b>
+                <span class="goal-status ${cls}">${escapeHtml(status.toUpperCase())}</span>
+                ${reason ? `<div style="margin-top:4px;color:var(--text-dim);font-size:12px">${escapeHtml(reason)}</div>` : ''}
+              </div>`);
+          } catch (e) {}
+        } else if (name === 'get_goal') {
+          // codex 自查 goal 状态 · 静默
         } else if (name === 'view_image') {
           try {
             const args = JSON.parse(p.arguments);
@@ -1215,7 +1627,7 @@ function renderTimeline(events) {
     }
 
     // ============ event_msg ============
-    if (t === 'event_msg') {
+    if (evType === 'event_msg') {
       const ptype = p.type;
       if (ptype === 'exec_command_end') { blocks.push(renderCmd(ev)); continue; }
       if (ptype === 'patch_apply_end') { blocks.push(renderPatch(ev)); continue; }
@@ -1248,7 +1660,7 @@ function renderTimeline(events) {
     }
 
     // ============ daemon log 格式 (没有 type 字段 · 有 direction + summary) ============
-    if (!t && ev.direction) {
+    if (!evType && ev.direction) {
       const dir = ev.direction;
       const sm = ev.summary || {};
       const ts = ev.ts_ms ? new Date(ev.ts_ms).toLocaleTimeString() : '';
@@ -1266,7 +1678,7 @@ function renderTimeline(events) {
     }
 
     // 兜底: 完全未识别的顶层 type
-    const fullKey = t || (ev.direction ? 'daemon-log' : 'unknown');
+    const fullKey = evType || (ev.direction ? 'daemon-log' : 'unknown');
     unknownTypes[fullKey] = (unknownTypes[fullKey] || 0) + 1;
     blocks.push(renderUnknown(ev, fullKey));
   }
@@ -1274,7 +1686,7 @@ function renderTimeline(events) {
   // 在底部加未识别事件统计 (调试用)
   if (Object.keys(unknownTypes).length > 0) {
     const summary = Object.entries(unknownTypes).map(([k, v]) => `${k}×${v}`).join(' · ');
-    blocks.push(`<div class="alert info" style="margin-top:24px">ℹ️ ${Object.values(unknownTypes).reduce((a,b)=>a+b,0)} 个未识别事件已 raw 显示: ${escapeHtml(summary)}</div>`);
+    blocks.push(`<div class="alert info" style="margin-top:24px">ℹ️ ${Object.values(unknownTypes).reduce((a,b)=>a+b,0)} unrecognized events shown as raw: ${escapeHtml(summary)}</div>`);
   }
 
   return blocks.join('\n');
@@ -1314,6 +1726,7 @@ function parseInput(text) {
 }
 
 function processSession(text, source) {
+  LAST_PROCESSED = { text, name: source };
   const sourceInfo = normalizeSourceInfo(source);
   const name = sourceInfo.name || sourceInfo.sourcePath || 'rollout.jsonl';
   const parsed = parseInput(text);
@@ -1321,16 +1734,16 @@ function processSession(text, source) {
   const parseErrors = parsed.parseErrors;
   $('picker').style.display = 'none';
   if (parseErrors > 0) {
-    console.warn(`${parseErrors} 行解析失败 (共 ${parsed.lineCount} 行)`);
+    console.warn(`${parseErrors} parse errors (out of ${parsed.lineCount} lines)`);
   }
 
   // 文件元数据 bar (兜底友好)
   const metaCounts = {};
   for (const ev of events) {
     if (ev._parseError) { metaCounts['_parseError'] = (metaCounts['_parseError']||0)+1; continue; }
-    const t = ev.type || '?';
+    const tType = ev.type || '?';
     const sub = ev.payload?.type || ev.payload?.name;
-    const k = sub ? `${t}:${sub}` : t;
+    const k = sub ? `${tType}:${sub}` : tType;
     metaCounts[k] = (metaCounts[k]||0) + 1;
   }
   const sortedTypes = Object.entries(metaCounts).sort((a,b)=>b[1]-a[1]);
@@ -1346,7 +1759,7 @@ function processSession(text, source) {
 
   // 空文件兜底
   if (events.length === 0) {
-    $('timeline').innerHTML = `<div class="alert warn">⚠ 文件为空或没有有效 JSON 行</div>`;
+    $('timeline').innerHTML = `<div class="alert warn">⚠ Empty file or no valid JSON lines</div>`;
     return;
   }
 
@@ -1364,6 +1777,15 @@ function processSession(text, source) {
   // stats
   const stats = {
     turns: events.filter(e => e.type === 'turn_context').length,
+    goals: events.filter(e => {
+      const p = e.payload || {};
+      if (p.type === 'message' && p.role === 'developer') {
+        const txt = (p.content || []).map(c => c.text || '').join('');
+        return txt.includes('<untrusted_objective>');
+      }
+      return false;
+    }).length,
+    goalUpdates: events.filter(e => e.payload?.type === 'function_call' && e.payload?.name === 'update_goal').length,
     cmds: events.filter(e => e.payload?.type === 'exec_command_end').length,
     patches: events.filter(e => e.payload?.type === 'patch_apply_end').length,
     plans: events.filter(e => {
@@ -1379,14 +1801,184 @@ function processSession(text, source) {
     reasoning: events.filter(e => e.payload?.type === 'reasoning').length,
   };
   const chips = [];
-  if (stats.turns) chips.push(`<span class="chip purple"><b>${stats.turns}</b> turns</span>`);
-  if (stats.questions) chips.push(`<span class="chip amber"><b>${stats.questions}</b> 反问</span>`);
-  if (stats.plans) chips.push(`<span class="chip green"><b>${stats.plans}</b> plans</span>`);
-  if (stats.todos) chips.push(`<span class="chip blue"><b>${stats.todos}</b> todo</span>`);
-  if (stats.cmds) chips.push(`<span class="chip"><b>${stats.cmds}</b> cmds</span>`);
-  if (stats.patches) chips.push(`<span class="chip"><b>${stats.patches}</b> patches</span>`);
-  if (stats.reasoning) chips.push(`<span class="chip"><b>${stats.reasoning}</b> reasoning</span>`);
+  if (stats.turns) chips.push(`<span class="chip purple"><b>${stats.turns}</b> ${t('turns_word')}</span>`);
+  if (stats.goals) chips.push(`<span class="chip purple"><b>${stats.goals}</b> ${t('goals_word')}${stats.goalUpdates ? ` (+${stats.goalUpdates} ${t('updates_word')})` : ''}</span>`);
+  if (stats.questions) chips.push(`<span class="chip amber"><b>${stats.questions}</b> ${t('questions_word')}</span>`);
+  if (stats.plans) chips.push(`<span class="chip green"><b>${stats.plans}</b> ${t('plans_word')}</span>`);
+  if (stats.todos) chips.push(`<span class="chip blue"><b>${stats.todos}</b> ${t('todo_word')}</span>`);
+  if (stats.cmds) chips.push(`<span class="chip"><b>${stats.cmds}</b> ${t('cmds_word')}</span>`);
+  if (stats.patches) chips.push(`<span class="chip"><b>${stats.patches}</b> ${t('patches_word')}</span>`);
+  if (stats.reasoning) chips.push(`<span class="chip"><b>${stats.reasoning}</b> ${t('reasoning_chip')}</span>`);
   $('stats').innerHTML = chips.join('');
+
+  // ============== EXTENDED STATS GRID ==============
+  // 时间跨度
+  const timestamps = events.map(e => {
+    const ts = e.timestamp || (e.payload && e.payload.timestamp);
+    if (typeof ts === 'string') return Date.parse(ts);
+    if (typeof ts === 'number') return ts;
+    if (typeof e.ts_ms === 'number') return e.ts_ms;
+    return null;
+  }).filter(Boolean);
+  const tsStart = timestamps.length ? Math.min(...timestamps) : null;
+  const tsEnd = timestamps.length ? Math.max(...timestamps) : null;
+  const durationMs = (tsStart && tsEnd) ? tsEnd - tsStart : 0;
+
+  // 命令成功率
+  const cmdEvents = events.filter(e => e.payload?.type === 'exec_command_end');
+  const cmdSuccess = cmdEvents.filter(e => e.payload?.exit_code === 0).length;
+  const cmdSuccessRate = cmdEvents.length ? Math.round(cmdSuccess / cmdEvents.length * 100) : 0;
+  const totalCmdSecs = cmdEvents.reduce((sum, e) => sum + (e.payload?.duration?.secs || 0), 0);
+
+  // patches 累计变更行数 + 文件类型
+  const patchEvents = events.filter(e => e.payload?.type === 'patch_apply_end');
+  const patchActions = { add: 0, update: 0, delete: 0, rename: 0 };
+  const patchFiles = new Set();
+  let totalPatchLines = 0;
+  for (const ev of patchEvents) {
+    const changes = ev.payload?.changes || {};
+    for (const [path, info] of Object.entries(changes)) {
+      patchFiles.add(path);
+      const action = info.type || 'update';
+      if (patchActions[action] !== undefined) patchActions[action]++;
+      const content = info.content || info.diff || '';
+      totalPatchLines += content.split('\n').length;
+    }
+  }
+
+  // mode breakdown
+  const turnContexts = events.filter(e => e.type === 'turn_context');
+  const planTurns = turnContexts.filter(e => e.payload?.collaboration_mode?.mode === 'plan').length;
+  const defaultTurns = turnContexts.filter(e => e.payload?.collaboration_mode?.mode === 'default').length;
+
+  // model
+  const modelUsed = turnContexts[0]?.payload?.model || meta.modelProvider || '?';
+  const personality = turnContexts[0]?.payload?.personality;
+
+  // goal final status (from last update_goal or last untrusted_objective with budget check)
+  const goalUpdates = events.filter(e => e.payload?.type === 'function_call' && e.payload?.name === 'update_goal');
+  let finalGoalStatus = null;
+  if (goalUpdates.length) {
+    try {
+      const last = JSON.parse(goalUpdates[goalUpdates.length - 1].payload.arguments || '{}');
+      finalGoalStatus = last.status;
+    } catch (e) {}
+  }
+  // 如果没 update_goal · 看最后一个 untrusted_objective 的 budget 是否超
+  if (!finalGoalStatus && stats.goals > 0) {
+    const goalDevMsgs = events.filter(e => {
+      const p = e.payload || {};
+      if (p.type !== 'message' || p.role !== 'developer') return false;
+      const txt = (p.content || []).map(c => c.text || '').join('');
+      return txt.includes('<untrusted_objective>');
+    });
+    if (goalDevMsgs.length) {
+      const lastTxt = (goalDevMsgs[goalDevMsgs.length - 1].payload.content || []).map(c => c.text || '').join('');
+      const tu = +(lastTxt.match(/Tokens used:\s*(\d+)/)?.[1] || 0);
+      const tb_raw = lastTxt.match(/Token budget:\s*(\w+)/)?.[1] || 'unlimited';
+      const tb = (tb_raw === 'unlimited' || tb_raw === 'none') ? null : +tb_raw;
+      if (tb && tu > tb) finalGoalStatus = 'budget_limited';
+      else finalGoalStatus = 'pursuing';
+    }
+  }
+
+  // 格式化时长
+  function fmtDuration(ms) {
+    if (!ms) return '—';
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    if (m < 60) return `${m}m ${sec}s`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+  }
+  function fmtTime(ms) {
+    if (!ms) return '—';
+    const d = new Date(ms);
+    return d.toLocaleString('en-CA', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  // 渲染 grid
+  const cells = [];
+  cells.push(`
+    <div class="stat-cell">
+      <div class="stat-label">${t('stat_duration')}</div>
+      <div class="stat-value purple">${fmtDuration(durationMs)}</div>
+      <div class="stat-sub">${fmtTime(tsStart)} → ${fmtTime(tsEnd)}</div>
+    </div>`);
+  if (tokens) {
+    const total = tokens.total_tokens || 0;
+    const ctx = ctxWin || 258400;
+    const ctxPct = Math.round((total / ctx) * 100);
+    cells.push(`
+      <div class="stat-cell">
+        <div class="stat-label">${t('stat_tokens')}</div>
+        <div class="stat-value amber">${total.toLocaleString()}</div>
+        <div class="stat-sub">in ${(tokens.input_tokens||0).toLocaleString()} · out ${(tokens.output_tokens||0).toLocaleString()} · ctx ${ctxPct}%</div>
+      </div>`);
+  } else {
+    cells.push(`<div class="stat-cell"><div class="stat-label">${t('stat_tokens')}</div><div class="stat-value">—</div><div class="stat-sub">${t('no_tokens_event')}</div></div>`);
+  }
+  cells.push(`
+    <div class="stat-cell">
+      <div class="stat-label">${t('stat_model')}</div>
+      <div class="stat-value">${escapeHtml(modelUsed || '—')}</div>
+      <div class="stat-sub">${personality || ''} · plan ${planTurns} · default ${defaultTurns}</div>
+    </div>`);
+  if (stats.goals > 0) {
+    const cls = finalGoalStatus === 'achieved' || finalGoalStatus === 'complete' ? 'green'
+              : finalGoalStatus === 'budget_limited' ? 'amber'
+              : finalGoalStatus === 'unmet' ? 'red'
+              : 'purple';
+    cells.push(`
+      <div class="stat-cell">
+        <div class="stat-label">${t('stat_goal_status')}</div>
+        <div class="stat-value ${cls}">${escapeHtml((finalGoalStatus||'pursuing').toUpperCase())}</div>
+        <div class="stat-sub">${stats.goals} set · ${stats.goalUpdates} ${t('updates_word')}</div>
+      </div>`);
+  } else {
+    cells.push(`<div class="stat-cell"><div class="stat-label">${t('stat_goal_status')}</div><div class="stat-value">—</div><div class="stat-sub">${t('no_goal_set')}</div></div>`);
+  }
+  if (cmdEvents.length) {
+    const rateCls = cmdSuccessRate >= 95 ? 'green' : cmdSuccessRate >= 70 ? 'amber' : 'red';
+    cells.push(`
+      <div class="stat-cell">
+        <div class="stat-label">${t('stat_commands')}</div>
+        <div class="stat-value ${rateCls}">${cmdEvents.length}</div>
+        <div class="stat-sub">${cmdSuccessRate}% ${t('cmds_ok')} · ${fmtDuration(totalCmdSecs * 1000)}</div>
+      </div>`);
+  }
+  if (patchFiles.size > 0) {
+    cells.push(`
+      <div class="stat-cell">
+        <div class="stat-label">${t('stat_files')}</div>
+        <div class="stat-value blue">${patchFiles.size}</div>
+        <div class="stat-sub">${patchEvents.length} ${t('patches_word')} · ${totalPatchLines.toLocaleString()} ${t('lines_word')}</div>
+      </div>`);
+  }
+  if (stats.questions > 0) {
+    const ansCount = events.filter(e => {
+      const p = e.payload || {};
+      if (p.type !== 'function_call_output') return false;
+      try { return JSON.parse(p.output || '{}').answers; } catch { return false; }
+    }).length;
+    cells.push(`
+      <div class="stat-cell">
+        <div class="stat-label">${t('stat_qa')}</div>
+        <div class="stat-value amber">${stats.questions}</div>
+        <div class="stat-sub">${ansCount} ${t('rounds_answered')}</div>
+      </div>`);
+  }
+  if (stats.plans > 0) {
+    cells.push(`
+      <div class="stat-cell">
+        <div class="stat-label">${t('stat_plans')}</div>
+        <div class="stat-value green">${stats.plans}</div>
+        <div class="stat-sub">${stats.todos} ${t('todo_updates')}</div>
+      </div>`);
+  }
+  $('stats-grid').innerHTML = cells.join('');
 
   if (tokens) {
     const used = tokens.total_tokens || 0;
@@ -1420,12 +2012,17 @@ picker.addEventListener('drop', (e) => {
   r.readAsText(f);
 });
 
+// init i18n
+$('lang-en').classList.toggle('active', LANG === 'en');
+$('lang-cn').classList.toggle('active', LANG === 'cn');
+applyStaticI18n();
+
 // auto-load via ?file=
 const qp = new URLSearchParams(location.search);
 const url = qp.get('file');
 if (url) {
-  fetch(url).then(r => r.text()).then(t => processSession(t, { name: url, sourcePath: url })).catch(e => {
-    $('title').textContent = '加载失败 · ' + (e.message || url);
+  fetch(url).then(r => r.text()).then(text => processSession(text, { name: url, sourcePath: url })).catch(e => {
+    $('title').textContent = (LANG === 'cn' ? '加载失败 · ' : 'Load failed · ') + (e.message || url);
   });
 }
 </script>
