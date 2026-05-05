@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 #[cfg(windows)]
 use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
@@ -9,6 +9,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::TryRecvError;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
@@ -20,12 +21,13 @@ use serde_json::{Map, Value, json};
 use crate::app_server::AppServer;
 use crate::cli::{
     DaemonCommand, EffectiveRuntime, LogMode, SessionAnswerArgs, SessionCommand,
-    SessionExecuteArgs, SessionListArgs, SessionResumeArgs, SessionRunIdArgs, SessionSendArgs,
-    SessionStartArgs,
+    SessionExecuteArgs, SessionListArgs, SessionReadArgs, SessionResumeArgs, SessionRunIdArgs,
+    SessionSendArgs, SessionStartArgs, SessionWatchArgs,
 };
 use crate::commands::start_thread;
 use crate::util::{
-    extract_proposed_plan, is_response_id, read_params, read_prompt, resume_command,
+    extract_proposed_plan, is_response_id, print_json_line, read_params, read_prompt,
+    resume_command,
 };
 
 const DEFAULT_THREAD_MODEL: &str = "gpt-5.5";
@@ -52,8 +54,61 @@ pub(crate) fn run_daemon_command(socket_path: PathBuf, command: DaemonCommand) -
                 })),
             }
         }
+        DaemonCommand::List => list_daemon_endpoints(&socket_path),
         DaemonCommand::Stop => send_request(&socket_path, json!({ "type": "daemon_stop" })),
         DaemonCommand::Serve => serve(socket_path),
+    }
+}
+
+fn list_daemon_endpoints(current_socket_path: &Path) -> Result<Value> {
+    let mut candidates = BTreeSet::new();
+    candidates.insert(current_socket_path.to_path_buf());
+    collect_endpoint_candidates(&std::env::temp_dir(), &mut candidates);
+    if let Ok(cwd) = std::env::current_dir() {
+        collect_endpoint_candidates(&cwd.join("target"), &mut candidates);
+    }
+
+    let endpoints = candidates
+        .into_iter()
+        .map(|path| {
+            let response = send_request(&path, json!({ "type": "daemon_status" }));
+            match response {
+                Ok(status) => json!({
+                    "path": path,
+                    "reachable": true,
+                    "status": status,
+                }),
+                Err(error) => json!({
+                    "path": path,
+                    "reachable": false,
+                    "error": error.to_string(),
+                }),
+            }
+        })
+        .collect::<Vec<_>>();
+    Ok(json!({
+        "ok": true,
+        "current_endpoint": current_socket_path,
+        "endpoints": endpoints,
+    }))
+}
+
+fn collect_endpoint_candidates(dir: &Path, candidates: &mut BTreeSet<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        let is_endpoint = file_name.starts_with("codexctl-")
+            && (file_name.ends_with(".sock") || file_name.ends_with(".endpoint"));
+        let is_custom_session_endpoint =
+            file_name.ends_with(".sock") || file_name.ends_with(".endpoint");
+        if is_endpoint || is_custom_session_endpoint {
+            candidates.insert(path);
+        }
     }
 }
 
@@ -78,6 +133,8 @@ pub(crate) fn run_session_command(
         SessionCommand::Send(args) => session_send_request(args)?,
         SessionCommand::Execute(args) => session_execute_request(args)?,
         SessionCommand::Resume(args) => session_resume_request(config, args)?,
+        SessionCommand::Read(args) => session_read_request(args),
+        SessionCommand::Watch(args) => return run_session_watch(&socket_path, args),
         SessionCommand::Interrupt(args) => run_id_request("session_interrupt", args),
         SessionCommand::List(args) => session_list_request(config, args),
         SessionCommand::Stop(args) => run_id_request("session_stop", args),
@@ -98,6 +155,10 @@ fn session_start_request(config: Value, args: SessionStartArgs) -> Result<Value>
         "model": args.model,
         "timeoutSecs": args.timeout.duration().map(|value| value.as_secs()),
         "detach": args.detach,
+        "compat": {
+            "questionMode": args.question_mode.map(|mode| format!("{mode:?}")),
+            "versionDir": args.version_dir,
+        },
         "runtime": {
             "cwd": runtime.cwd,
             "sandbox": runtime.sandbox,
@@ -107,15 +168,16 @@ fn session_start_request(config: Value, args: SessionStartArgs) -> Result<Value>
 }
 
 fn session_answer_request(args: SessionAnswerArgs) -> Result<Value> {
-    let answer = if args.pick.is_some() {
+    let answer = if args.pick.is_some() || !args.answers.is_empty() {
         Value::Null
     } else {
-        build_session_answer(args.answers, args.answers_json, args.answers_file)?
+        build_session_answer(Vec::new(), args.answers_json, args.answers_file)?
     };
     Ok(json!({
         "type": "session_answer",
         "runId": args.run_id,
         "answer": answer,
+        "answerPairs": args.answers,
         "pick": args.pick,
         "timeoutSecs": args.timeout.duration().map(|value| value.as_secs()),
         "detach": args.detach,
@@ -171,6 +233,33 @@ fn session_resume_request(config: Value, args: SessionResumeArgs) -> Result<Valu
             "approvalPolicy": runtime.approval_policy,
         }
     }))
+}
+
+fn session_read_request(args: SessionReadArgs) -> Value {
+    json!({
+        "type": "session_read",
+        "runId": args.run_id,
+        "full": args.full,
+    })
+}
+
+fn run_session_watch(socket_path: &Path, args: SessionWatchArgs) -> Result<Value> {
+    let interval = Duration::from_millis(args.interval_ms.max(50));
+    loop {
+        let response = send_request(
+            socket_path,
+            json!({
+                "type": "session_read",
+                "runId": args.run_id,
+                "full": args.full,
+            }),
+        )?;
+        print_json_line(&response);
+        if response.get("status").and_then(Value::as_str) != Some("running") {
+            return Ok(response);
+        }
+        thread::sleep(interval);
+    }
 }
 
 fn session_list_request(config: Value, args: SessionListArgs) -> Value {
@@ -303,16 +392,12 @@ fn serve(socket_path: PathBuf) -> Result<Value> {
     }
     let listener = UnixListener::bind(&socket_path)
         .with_context(|| format!("bind daemon socket {}", socket_path.display()))?;
-    let mut daemon = SessionDaemon::default();
-    for stream in listener.incoming() {
-        let Ok(stream) = stream else {
-            continue;
-        };
-        let should_stop = daemon.handle_stream(stream).unwrap_or_default();
-        if should_stop {
-            break;
-        }
-    }
+    listener
+        .set_nonblocking(true)
+        .context("set daemon socket nonblocking")?;
+    serve_loop(listener, |listener| {
+        listener.accept().map(|(stream, _)| stream)
+    })?;
     let _ = fs::remove_file(&socket_path);
     Ok(json!({ "ok": true, "status": "stopped" }))
 }
@@ -334,18 +419,45 @@ fn serve(socket_path: PathBuf) -> Result<Value> {
         .to_string();
     fs::write(&socket_path, &endpoint)
         .with_context(|| format!("write daemon endpoint {}", socket_path.display()))?;
-    let mut daemon = SessionDaemon::default();
-    for stream in listener.incoming() {
-        let Ok(stream) = stream else {
-            continue;
-        };
-        let should_stop = daemon.handle_stream(stream).unwrap_or_default();
-        if should_stop {
-            break;
-        }
-    }
+    listener
+        .set_nonblocking(true)
+        .context("set daemon TCP listener nonblocking")?;
+    serve_loop(listener, |listener| {
+        listener.accept().map(|(stream, _)| stream)
+    })?;
     let _ = fs::remove_file(&socket_path);
     Ok(json!({ "ok": true, "status": "stopped" }))
+}
+
+fn serve_loop<L, S, F>(listener: L, mut accept: F) -> Result<()>
+where
+    L: Send + 'static,
+    S: Read + Write + Send + 'static,
+    F: FnMut(&L) -> std::io::Result<S>,
+{
+    let daemon = Arc::new(Mutex::new(SessionDaemon::default()));
+    let stop = Arc::new(AtomicBool::new(false));
+    while !stop.load(Ordering::SeqCst) {
+        match accept(&listener) {
+            Ok(stream) => {
+                let daemon = Arc::clone(&daemon);
+                let stop = Arc::clone(&stop);
+                thread::spawn(move || {
+                    let should_stop = handle_daemon_stream(daemon, stream).unwrap_or_default();
+                    if should_stop {
+                        stop.store(true, Ordering::SeqCst);
+                    }
+                });
+            }
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(25));
+            }
+            Err(_) => {
+                thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Default)]
@@ -353,59 +465,60 @@ struct SessionDaemon {
     runs: HashMap<String, RunHandle>,
 }
 
-impl SessionDaemon {
-    fn handle_stream<S: Read + Write>(&mut self, mut stream: S) -> Result<bool> {
-        let mut line = String::new();
-        {
-            let mut reader = BufReader::new(&mut stream);
-            reader.read_line(&mut line)?;
-        }
-        let outcome = serde_json::from_str(line.trim())
-            .context("invalid daemon request")
-            .and_then(|request| self.dispatch(request));
-        let (response, should_stop) = match outcome {
-            Ok(outcome) => outcome,
-            Err(error) => (
-                json!({
-                    "ok": false,
-                    "status": "failed",
-                    "error": error.to_string(),
-                }),
-                false,
-            ),
-        };
-        writeln!(stream, "{response}")?;
-        stream.flush()?;
-        Ok(should_stop)
+fn handle_daemon_stream<S: Read + Write>(
+    daemon: Arc<Mutex<SessionDaemon>>,
+    mut stream: S,
+) -> Result<bool> {
+    let mut line = String::new();
+    {
+        let mut reader = BufReader::new(&mut stream);
+        reader.read_line(&mut line)?;
     }
+    let outcome = serde_json::from_str(line.trim())
+        .context("invalid daemon request")
+        .and_then(|request| SessionDaemon::dispatch_shared(&daemon, request));
+    let (response, should_stop) = match outcome {
+        Ok(outcome) => outcome,
+        Err(error) => (
+            json!({
+                "ok": false,
+                "status": "failed",
+                "error": error.to_string(),
+            }),
+            false,
+        ),
+    };
+    writeln!(stream, "{response}")?;
+    stream.flush()?;
+    Ok(should_stop)
+}
 
-    fn dispatch(&mut self, request: Value) -> Result<(Value, bool)> {
+impl SessionDaemon {
+    fn dispatch_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<(Value, bool)> {
         Ok(match request.get("type").and_then(Value::as_str) {
             Some("daemon_status") => (
-                json!({
-                    "ok": true,
-                    "status": "running",
-                    "runs": self.runs.keys().cloned().collect::<Vec<_>>(),
-                    "run_count": self.runs.len(),
-                }),
+                daemon
+                    .lock()
+                    .map_err(|_| anyhow!("session daemon lock poisoned"))?
+                    .status_response(),
                 false,
             ),
             Some("daemon_stop") => (
-                json!({
-                    "ok": true,
-                    "status": "stopping",
-                    "stopped_runs": self.runs.len(),
-                }),
+                daemon
+                    .lock()
+                    .map_err(|_| anyhow!("session daemon lock poisoned"))?
+                    .stop_response(),
                 true,
             ),
-            Some("session_start") => (self.handle_start(request)?, false),
-            Some("session_resume") => (self.handle_resume(request)?, false),
-            Some("session_answer") => (self.handle_answer(request)?, false),
-            Some("session_send") => (self.handle_send(request)?, false),
-            Some("session_execute") => (self.handle_execute(request)?, false),
-            Some("session_interrupt") => (self.handle_interrupt(request)?, false),
-            Some("session_list") => (self.handle_list(request)?, false),
-            Some("session_stop") => (self.handle_stop(request)?, false),
+            Some("session_start") => (Self::handle_start_shared(daemon, request)?, false),
+            Some("session_resume") => (Self::handle_resume_shared(daemon, request)?, false),
+            Some("session_answer") => (Self::handle_answer_shared(daemon, request)?, false),
+            Some("session_send") => (Self::handle_send_shared(daemon, request)?, false),
+            Some("session_execute") => (Self::handle_execute_shared(daemon, request)?, false),
+            Some("session_interrupt") => (Self::handle_interrupt_shared(daemon, request)?, false),
+            Some("session_read") => (Self::handle_read_shared(daemon, request)?, false),
+            Some("session_list") => (Self::handle_list_shared(daemon, request)?, false),
+            Some("session_stop") => (Self::handle_stop_shared(daemon, request)?, false),
             other => (
                 json!({
                     "ok": false,
@@ -417,7 +530,24 @@ impl SessionDaemon {
         })
     }
 
-    fn handle_start(&mut self, request: Value) -> Result<Value> {
+    fn status_response(&self) -> Value {
+        json!({
+            "ok": true,
+            "status": "running",
+            "runs": self.runs.keys().cloned().collect::<Vec<_>>(),
+            "run_count": self.runs.len(),
+        })
+    }
+
+    fn stop_response(&self) -> Value {
+        json!({
+            "ok": true,
+            "status": "stopping",
+            "stopped_runs": self.runs.len(),
+        })
+    }
+
+    fn handle_start_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
         let config = &request["config"];
         let codex_bin = string_at(config, "codexBin")?;
         let codex_home = path_at(config, "codexHome");
@@ -470,6 +600,67 @@ impl SessionDaemon {
             goal,
         })));
         let handle = spawn_run_worker(server, Arc::clone(&state));
+        daemon
+            .lock()
+            .map_err(|_| anyhow!("session daemon lock poisoned"))?
+            .runs
+            .insert(run_id, handle.clone());
+        if let Err(error) = submit_start_turn(
+            &handle,
+            prompt,
+            string_at(&request, "effort")?,
+            request
+                .get("model")
+                .and_then(Value::as_str)
+                .map(ToString::to_string),
+            TurnMode::Plan,
+        ) {
+            mark_failed(&state, error.to_string());
+            return run_response(&state);
+        }
+        let response = if bool_at(&request, "detach") {
+            run_response(&state)?
+        } else {
+            wait_until_pause(&state, timeout)?
+        };
+        Ok(response)
+    }
+
+    fn handle_answer_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
+        let run_id = string_at(&request, "runId")?;
+        let timeout = timeout_at(&request);
+        let handle = Self::handle_for_run(daemon, &run_id)?;
+        let answer = if let Some(pick) = request.get("pick").and_then(Value::as_str) {
+            build_pick_answer(&handle.state, pick)?
+        } else if let Some(pairs) = request.get("answerPairs").and_then(Value::as_array)
+            && !pairs.is_empty()
+        {
+            let pairs = pairs
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+            build_answer_pairs_for_state(&handle.state, pairs)?
+        } else {
+            request
+                .get("answer")
+                .cloned()
+                .filter(|value| !value.is_null())
+                .ok_or_else(|| anyhow!("session_answer missing answer or pick"))?
+        };
+        submit_answer(&handle, answer)?;
+        if bool_at(&request, "detach") {
+            run_response(&handle.state)
+        } else {
+            wait_until_pause(&handle.state, timeout)
+        }
+    }
+
+    fn handle_send_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
+        let run_id = string_at(&request, "runId")?;
+        let timeout = timeout_at(&request);
+        let handle = Self::handle_for_run(daemon, &run_id)?;
+        let prompt = string_at(&request, "prompt")?;
         submit_start_turn(
             &handle,
             prompt,
@@ -480,32 +671,6 @@ impl SessionDaemon {
                 .map(ToString::to_string),
             TurnMode::Plan,
         )?;
-        let response = if bool_at(&request, "detach") {
-            run_response(&state)?
-        } else {
-            wait_until_pause(&state, timeout)?
-        };
-        self.runs.insert(run_id, handle);
-        Ok(response)
-    }
-
-    fn handle_answer(&mut self, request: Value) -> Result<Value> {
-        let run_id = string_at(&request, "runId")?;
-        let timeout = timeout_at(&request);
-        let handle = self
-            .runs
-            .get(&run_id)
-            .ok_or_else(|| anyhow!("unknown run id: {run_id}"))?;
-        let answer = if let Some(pick) = request.get("pick").and_then(Value::as_str) {
-            build_pick_answer(&handle.state, pick)?
-        } else {
-            request
-                .get("answer")
-                .cloned()
-                .filter(|value| !value.is_null())
-                .ok_or_else(|| anyhow!("session_answer missing answer or pick"))?
-        };
-        submit_answer(handle, answer)?;
         if bool_at(&request, "detach") {
             run_response(&handle.state)
         } else {
@@ -513,41 +678,13 @@ impl SessionDaemon {
         }
     }
 
-    fn handle_send(&mut self, request: Value) -> Result<Value> {
+    fn handle_execute_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
         let run_id = string_at(&request, "runId")?;
         let timeout = timeout_at(&request);
-        let handle = self
-            .runs
-            .get(&run_id)
-            .ok_or_else(|| anyhow!("unknown run id: {run_id}"))?;
+        let handle = Self::handle_for_run(daemon, &run_id)?;
         let prompt = string_at(&request, "prompt")?;
         submit_start_turn(
-            handle,
-            prompt,
-            string_at(&request, "effort")?,
-            request
-                .get("model")
-                .and_then(Value::as_str)
-                .map(ToString::to_string),
-            TurnMode::Plan,
-        )?;
-        if bool_at(&request, "detach") {
-            run_response(&handle.state)
-        } else {
-            wait_until_pause(&handle.state, timeout)
-        }
-    }
-
-    fn handle_execute(&mut self, request: Value) -> Result<Value> {
-        let run_id = string_at(&request, "runId")?;
-        let timeout = timeout_at(&request);
-        let handle = self
-            .runs
-            .get(&run_id)
-            .ok_or_else(|| anyhow!("unknown run id: {run_id}"))?;
-        let prompt = string_at(&request, "prompt")?;
-        submit_start_turn(
-            handle,
+            &handle,
             prompt,
             string_at(&request, "effort")?,
             request
@@ -563,7 +700,7 @@ impl SessionDaemon {
         }
     }
 
-    fn handle_resume(&mut self, request: Value) -> Result<Value> {
+    fn handle_resume_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
         let config = &request["config"];
         let codex_bin = string_at(config, "codexBin")?;
         let codex_home = path_at(config, "codexHome");
@@ -616,22 +753,35 @@ impl SessionDaemon {
             state.set_status("completed", "resumed");
         }
         let response = run_response(&state)?;
-        self.runs.insert(run_id, spawn_run_worker(server, state));
+        daemon
+            .lock()
+            .map_err(|_| anyhow!("session daemon lock poisoned"))?
+            .runs
+            .insert(run_id, spawn_run_worker(server, state));
         Ok(response)
     }
 
-    fn handle_interrupt(&mut self, request: Value) -> Result<Value> {
+    fn handle_interrupt_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
         let run_id = string_at(&request, "runId")?;
-        let handle = self
-            .runs
-            .get(&run_id)
-            .ok_or_else(|| anyhow!("unknown run id: {run_id}"))?;
-        submit_interrupt(handle)?;
+        let handle = Self::handle_for_run(daemon, &run_id)?;
+        submit_interrupt(&handle)?;
         run_response(&handle.state)
     }
 
-    fn handle_list(&mut self, request: Value) -> Result<Value> {
-        let runs = self
+    fn handle_read_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
+        let run_id = string_at(&request, "runId")?;
+        let handle = Self::handle_for_run(daemon, &run_id)?;
+        if bool_at(&request, "full") {
+            run_response(&handle.state)
+        } else {
+            run_read_summary(&handle.state)
+        }
+    }
+
+    fn handle_list_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
+        let runs = daemon
+            .lock()
+            .map_err(|_| anyhow!("session daemon lock poisoned"))?
             .runs
             .values()
             .filter_map(|handle| run_summary(&handle.state).ok())
@@ -660,9 +810,13 @@ impl SessionDaemon {
         }))
     }
 
-    fn handle_stop(&mut self, request: Value) -> Result<Value> {
+    fn handle_stop_shared(daemon: &Arc<Mutex<Self>>, request: Value) -> Result<Value> {
         let run_id = string_at(&request, "runId")?;
-        let existed = self.runs.remove(&run_id);
+        let existed = daemon
+            .lock()
+            .map_err(|_| anyhow!("session daemon lock poisoned"))?
+            .runs
+            .remove(&run_id);
         if let Some(handle) = &existed {
             let _ = handle.control.send(RunCommand::Stop);
             if let Ok(mut state) = handle.state.lock() {
@@ -675,8 +829,19 @@ impl SessionDaemon {
             "run_id": run_id,
         }))
     }
+
+    fn handle_for_run(daemon: &Arc<Mutex<Self>>, run_id: &str) -> Result<RunHandle> {
+        daemon
+            .lock()
+            .map_err(|_| anyhow!("session daemon lock poisoned"))?
+            .runs
+            .get(run_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("unknown run id: {run_id}"))
+    }
 }
 
+#[derive(Clone)]
 struct RunHandle {
     state: Arc<Mutex<RunState>>,
     control: mpsc::Sender<RunCommand>,
@@ -792,6 +957,13 @@ fn run_response(state: &Arc<Mutex<RunState>>) -> Result<Value> {
     Ok(state.response())
 }
 
+fn run_read_summary(state: &Arc<Mutex<RunState>>) -> Result<Value> {
+    let state = state
+        .lock()
+        .map_err(|_| anyhow!("session run state lock poisoned"))?;
+    Ok(state.summary_response())
+}
+
 fn run_summary(state: &Arc<Mutex<RunState>>) -> Result<Value> {
     let state = state
         .lock()
@@ -855,6 +1027,72 @@ fn build_pick_answer(state: &Arc<Mutex<RunState>>, raw_pick: &str) -> Result<Val
         answers.insert(id, json!({ "answers": [selected] }));
     }
     Ok(json!({ "answers": answers }))
+}
+
+fn build_answer_pairs_for_state(state: &Arc<Mutex<RunState>>, pairs: Vec<String>) -> Result<Value> {
+    let questions = {
+        let state = state
+            .lock()
+            .map_err(|_| anyhow!("session run state lock poisoned"))?;
+        state.questions.clone()
+    };
+    if pairs.is_empty() {
+        bail!("session answer requires at least one --answer QUESTION_ID=VALUE");
+    }
+    let mut answers = Map::new();
+    for pair in pairs {
+        let Some((question_id, raw_answer)) = pair.split_once('=') else {
+            bail!("answer must be QUESTION_ID=VALUE, got {pair}");
+        };
+        let question_id = question_id.trim();
+        let raw_answer = raw_answer.trim();
+        if question_id.is_empty() || raw_answer.is_empty() {
+            bail!("answer must be QUESTION_ID=VALUE, got {pair}");
+        }
+        let selected = questions
+            .iter()
+            .find(|question| question.get("id").and_then(Value::as_str) == Some(question_id))
+            .and_then(|question| normalize_answer_for_question(question, raw_answer))
+            .unwrap_or_else(|| raw_answer.to_string());
+        answers.insert(question_id.to_string(), json!({ "answers": [selected] }));
+    }
+    Ok(json!({ "answers": answers }))
+}
+
+fn normalize_answer_for_question(question: &Value, raw_answer: &str) -> Option<String> {
+    if let Ok(index) = raw_answer.parse::<usize>() {
+        return select_index(question, index);
+    }
+    let labels = option_labels(question);
+    if labels.iter().any(|label| label == raw_answer) {
+        return Some(raw_answer.to_string());
+    }
+    let normalized_raw = normalize_label(raw_answer);
+    labels
+        .into_iter()
+        .find(|label| normalize_label(label) == normalized_raw)
+}
+
+fn option_labels(question: &Value) -> Vec<String> {
+    question
+        .get("options")
+        .and_then(Value::as_array)
+        .map(|options| {
+            options
+                .iter()
+                .filter_map(|option| option.get("label").and_then(Value::as_str))
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn normalize_label(value: &str) -> String {
+    value
+        .chars()
+        .filter(|char| !char.is_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 fn question_id(question: &Value) -> Result<String> {
@@ -1341,6 +1579,48 @@ impl RunState {
             "elapsed_ms": now.saturating_sub(self.started_at_ms),
         })
     }
+
+    fn summary_response(&self) -> Value {
+        let now = now_millis();
+        let last_agent_message = self
+            .agent_messages
+            .last()
+            .or_else(|| self.agent_deltas.last())
+            .cloned();
+        json!({
+            "ok": self.status != "failed",
+            "summary": true,
+            "snapshot_stale_ok": self.status == "running",
+            "status": self.status,
+            "current_phase": self.current_phase,
+            "run_id": self.run_id,
+            "thread_id": self.thread_id,
+            "turn_id": self.turn_id,
+            "codex_home": self.codex_home,
+            "thread_path": self.thread_path,
+            "resume_command": resume_command(self.codex_home.as_deref(), &self.thread_id),
+            "pending_request_id": self.pending_request_id,
+            "questions": self.questions,
+            "counts": {
+                "questions": self.questions.len(),
+                "plans": self.plans.len(),
+                "agent_messages": self.agent_messages.len(),
+                "agent_deltas": self.agent_deltas.len(),
+                "warnings": self.warnings.len(),
+                "errors": self.errors.len(),
+                "items": self.items.len(),
+            },
+            "last_agent_message": last_agent_message,
+            "usage": self.usage,
+            "completed": self.completed,
+            "warnings": self.warnings,
+            "errors": self.errors,
+            "log_path": self.log_path,
+            "started_at_ms": self.started_at_ms,
+            "updated_at_ms": self.updated_at_ms,
+            "elapsed_ms": now.saturating_sub(self.started_at_ms),
+        })
+    }
 }
 
 fn string_at(value: &Value, key: &str) -> Result<String> {
@@ -1401,7 +1681,10 @@ mod tests {
 
     use serde_json::json;
 
-    use super::{RunState, RunStateInit, build_pick_answer, build_session_answer};
+    use super::{
+        RunState, RunStateInit, build_answer_pairs_for_state, build_pick_answer,
+        build_session_answer,
+    };
 
     #[test]
     fn builds_session_answer_from_pairs() {
@@ -1471,5 +1754,48 @@ mod tests {
         let indexed = build_pick_answer(&state, "2,1").unwrap();
         assert_eq!(indexed["answers"]["scope"]["answers"][0], "B Large");
         assert_eq!(indexed["answers"]["mode"]["answers"][0], "Plan");
+    }
+
+    #[test]
+    fn builds_answer_pairs_from_indexes_and_normalized_labels() {
+        let mut state = RunState::new(RunStateInit {
+            run_id: "run-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            thread_model: "gpt-5.5".to_string(),
+            approval_policy: "never".to_string(),
+            codex_home: None,
+            thread_path: None,
+            log_path: None,
+            goal: None,
+        });
+        state.questions = vec![
+            json!({
+                "id": "scope",
+                "options": [
+                    {"label": "A Small (Recommended)"},
+                    {"label": "B Large"}
+                ]
+            }),
+            json!({
+                "id": "workflow_style",
+                "options": [
+                    {"label": "快速个人清单 (Recommended)"}
+                ]
+            }),
+        ];
+        let state = Arc::new(Mutex::new(state));
+        let answer = build_answer_pairs_for_state(
+            &state,
+            vec![
+                "scope=2".to_string(),
+                "workflow_style=快速个人清单(Recommended)".to_string(),
+            ],
+        )
+        .unwrap();
+        assert_eq!(answer["answers"]["scope"]["answers"][0], "B Large");
+        assert_eq!(
+            answer["answers"]["workflow_style"]["answers"][0],
+            "快速个人清单 (Recommended)"
+        );
     }
 }

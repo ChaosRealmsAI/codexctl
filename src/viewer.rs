@@ -27,7 +27,7 @@ pub(crate) fn run_viewer(
         log_mode,
         &args,
     )?;
-    let viewer_path = write_viewer_html(args.out.as_deref(), &source)?;
+    let viewer_path = write_viewer_html(args.out.as_deref(), args.viewer_html.as_deref(), &source)?;
     let opened = if args.no_open {
         false
     } else {
@@ -151,7 +151,11 @@ fn read_jsonl_source(
     })
 }
 
-fn write_viewer_html(out: Option<&Path>, source: &ViewerSource) -> Result<PathBuf> {
+fn write_viewer_html(
+    out: Option<&Path>,
+    viewer_html: Option<&Path>,
+    source: &ViewerSource,
+) -> Result<PathBuf> {
     let path = match out {
         Some(path) => path.to_path_buf(),
         None => default_viewer_path()?,
@@ -177,10 +181,15 @@ window.addEventListener('DOMContentLoaded', () => {{
         js_string(&source.text)?,
         serde_json::to_string(&context)?,
     );
-    let html = if VIEWER_HTML.contains("</body>") {
-        VIEWER_HTML.replace("</body>", &format!("{boot}</body>"))
+    let template = match viewer_html {
+        Some(path) => fs::read_to_string(path)
+            .with_context(|| format!("read viewer html {}", path.display()))?,
+        None => VIEWER_HTML.to_string(),
+    };
+    let html = if template.contains("</body>") {
+        template.replace("</body>", &format!("{boot}</body>"))
     } else {
-        format!("{VIEWER_HTML}\n{boot}")
+        format!("{template}\n{boot}")
     };
     fs::write(&path, html).with_context(|| format!("write viewer html {}", path.display()))?;
     Ok(path)

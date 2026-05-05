@@ -40,6 +40,8 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
        codexctl session --help
        codexctl session start --help
        codexctl session answer --help
+       codexctl session read --help
+       codexctl session watch --help
        codexctl session execute --help
        codexctl view --help
        codexctl goal --help
@@ -52,7 +54,8 @@ Command index:
   Protocol discovery     methods, modes, features, raw
   Threads/goals          read, goal set, goal get, goal clear
   One-shot planning      plan, answer
-  Long sessions          session start, answer, send, execute, list, resume, interrupt, stop (recommended for app integrations)
+  Long sessions          session start, answer, send, execute, read, watch, list, resume, interrupt, stop
+                         (recommended for app integrations)
   Viewing                view
   Daemon debugging       daemon status, daemon start, daemon stop
 
@@ -516,6 +519,8 @@ What it opens:
   FILE                  A local Codex rollout JSONL file.
   --run-id <run_id>     The local thread_path backing a currently in-memory daemon run.
                         This is not durable across daemon restarts; use FILE when a run_id is no longer listed.
+  --viewer-html <file>  Use an external viewer template, for example the editable repo-level viewer.html.
+                        Without this flag, codexctl uses the bundled viewer compiled into the binary.
 
 Display:
   The top of the generated page shows a copyable resume command:
@@ -524,6 +529,7 @@ Display:
 
 Parameters:
   --out <file>          Write the generated standalone HTML viewer to this path.
+  --viewer-html <file>  External HTML template to inject the rollout data into.
   --no-open             Generate the HTML but do not open a browser.
 
 Boundary:
@@ -559,6 +565,8 @@ Use Session mode when:
 
   5. Inspect, resume, interrupt, or stop runs.
        codexctl session list --threads
+       codexctl session read --run-id <run_id>
+       codexctl session watch --run-id <run_id>
        codexctl view --run-id <run_id>
        codexctl session resume --thread-id <thread_id>
        codexctl session interrupt --run-id <run_id>
@@ -577,6 +585,7 @@ Run response fields:
   questions              Pending structured questions when status=needs_input.
   agent_deltas           Text deltas collected so far while status=running.
   thread_path            Local Codex rollout JSONL path used by `codexctl view --run-id`.
+  read/watch             Nonblocking snapshots. `session read` defaults to compact summary; add --full for full state.
 
 Use `session` rather than one-shot `plan` for app integrations that need question answering, plan confirmation, execution, or later inspection.
 The caller only uses CLI commands. The local daemon is an implementation detail and is auto-started by session commands.
@@ -603,6 +612,8 @@ Parameters:
   --model <id>           Optional model id from `codexctl models`.
   --effort <effort>      Reasoning effort: low, medium, high, or xhigh for most current Codex models.
   --reasoning-effort     Alias for --effort.
+  --question-mode <mode> Compatibility alias accepted for older scripts. Session runs always stop and return needs_input for structured questions.
+  --version-dir <dir>    Compatibility alias accepted for older scripts. This flag does not write files.
   --sandbox <mode>       read-only, workspace-write, or danger-full-access.
   --approval-policy <p>  untrusted, on-failure, on-request, or never.
   --dangerously-full-access
@@ -619,6 +630,7 @@ Output:
 
 pub(crate) const SESSION_ANSWER_AFTER_HELP: &str = r#"Examples:
   codexctl session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
+  codexctl session answer --run-id <run_id> --answer scope=1
   codexctl session answer --run-id <run_id> --pick recommended
   codexctl session answer --run-id <run_id> --pick first
   codexctl session answer --run-id <run_id> --pick 1,2,1
@@ -627,12 +639,42 @@ pub(crate) const SESSION_ANSWER_AFTER_HELP: &str = r#"Examples:
 
 Parameters:
   --answer               Exact QUESTION_ID=SELECTED_LABEL answer. Repeat for multiple questions.
+                         VALUE may also be a 1-based option index. Whitespace-insensitive label matching is supported.
   --pick recommended     Select the option label containing "(Recommended)" for every pending question.
   --pick first           Select the first option for every pending question.
   --pick 1,2,1           Select option indexes by pending-question order.
 
 Output:
   Same shape as session start. Without --detach, it returns after the next question or completion. With --detach, it returns after submitting the answer.
+"#;
+
+pub(crate) const SESSION_READ_AFTER_HELP: &str = r#"Examples:
+  codexctl session read --run-id <run_id>
+  codexctl session read --run-id <run_id> --full
+
+Behavior:
+  Always returns immediately from daemon memory; it does not wait for the active turn to finish.
+  Default output is a compact summary: status, phase, counts, last_agent_message, questions, warnings, errors, thread_path, and stale flag.
+  Add --full only when you need all plans, agent_messages, agent_deltas, items, and raw fields.
+
+Exit code:
+  0                     Snapshot read succeeded, regardless of run status.
+"#;
+
+pub(crate) const SESSION_WATCH_AFTER_HELP: &str = r#"Examples:
+  codexctl session watch --run-id <run_id>
+  codexctl session watch --run-id <run_id> --interval-ms 500
+  codexctl session watch --run-id <run_id> --full
+
+Behavior:
+  Polls `session read` and prints each snapshot as one JSONL line until status is no longer running.
+  This is the high-performance CLI-safe progress path for detached long turns.
+
+Exit code:
+  0                     Final status is completed or another non-error terminal status.
+  1                     Final status is failed.
+  20                    Final status is needs_input.
+  21                    Command returned while status is still running.
 "#;
 
 pub(crate) const SESSION_SEND_AFTER_HELP: &str = r#"Examples:
@@ -697,8 +739,10 @@ Note:
 
 pub(crate) const DAEMON_AFTER_HELP: &str = r#"Examples:
   codexctl daemon status
+  codexctl daemon list
   codexctl daemon start
   codexctl daemon stop
 
 Session commands auto-start the daemon. Manual daemon commands are for debugging.
+Use `daemon list` when multiple debug/release binaries or custom --session-socket paths may have left reachable daemons behind.
 "#;

@@ -191,6 +191,12 @@ pub struct ViewArgs {
         help = "Write the generated viewer HTML to this path"
     )]
     pub out: Option<PathBuf>,
+    #[arg(
+        long,
+        value_name = "FILE",
+        help = "Use an external viewer HTML template instead of the bundled viewer"
+    )]
+    pub viewer_html: Option<PathBuf>,
     #[arg(long, help = "Generate the viewer HTML but do not open the browser")]
     pub no_open: bool,
 }
@@ -327,6 +333,16 @@ pub enum SessionCommand {
     )]
     Resume(SessionResumeArgs),
     #[command(
+        about = "Read a nonblocking snapshot for one daemon run",
+        after_help = help::SESSION_READ_AFTER_HELP
+    )]
+    Read(SessionReadArgs),
+    #[command(
+        about = "Watch a daemon run by polling nonblocking snapshots as JSONL",
+        after_help = help::SESSION_WATCH_AFTER_HELP
+    )]
+    Watch(SessionWatchArgs),
+    #[command(
         about = "Interrupt the current turn without removing the run",
         after_help = help::SESSION_INTERRUPT_AFTER_HELP
     )]
@@ -346,6 +362,8 @@ pub enum DaemonCommand {
     Start,
     #[command(about = "Check whether the local session daemon is running")]
     Status,
+    #[command(about = "List reachable codexctl daemon endpoints")]
+    List,
     #[command(about = "Stop the local session daemon")]
     Stop,
     #[command(hide = true)]
@@ -398,6 +416,18 @@ pub struct SessionStartArgs {
         help = "Return immediately after submitting the turn; inspect progress with codexctl view --run-id"
     )]
     pub detach: bool,
+    #[arg(
+        long,
+        value_enum,
+        help = "Compatibility option; daemon sessions always surface questions for session answer"
+    )]
+    pub question_mode: Option<QuestionMode>,
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Compatibility option accepted for older scripts; no files are written by this flag"
+    )]
+    pub version_dir: Option<PathBuf>,
     #[command(flatten)]
     pub runtime: RuntimeArgs,
 }
@@ -528,6 +558,31 @@ pub struct SessionResumeArgs {
     pub model: Option<String>,
     #[command(flatten)]
     pub runtime: RuntimeArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionReadArgs {
+    #[arg(long, help = "Run id returned by codexctl session start or resume")]
+    pub run_id: String,
+    #[arg(
+        long,
+        help = "Return full run state instead of the default compact summary"
+    )]
+    pub full: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionWatchArgs {
+    #[arg(long, help = "Run id returned by codexctl session start or resume")]
+    pub run_id: String,
+    #[arg(
+        long,
+        default_value_t = 1000,
+        help = "Polling interval in milliseconds"
+    )]
+    pub interval_ms: u64,
+    #[arg(long, help = "Print full run state on every JSONL line")]
+    pub full: bool,
 }
 
 #[derive(Debug, Args)]
@@ -882,6 +937,20 @@ mod tests {
             execute.command,
             Commands::Session(SessionCommand::Execute(_))
         ));
+
+        let read =
+            Cli::try_parse_from(["codexctl", "session", "read", "--run-id", "run-1"]).unwrap();
+        assert!(matches!(
+            read.command,
+            Commands::Session(SessionCommand::Read(_))
+        ));
+
+        let watch =
+            Cli::try_parse_from(["codexctl", "session", "watch", "--run-id", "run-1"]).unwrap();
+        assert!(matches!(
+            watch.command,
+            Commands::Session(SessionCommand::Watch(_))
+        ));
     }
 
     #[test]
@@ -900,7 +969,24 @@ mod tests {
         };
         assert_eq!(args.file, Some(PathBuf::from("sample-session.jsonl")));
         assert_eq!(args.out, Some(PathBuf::from("target/view.html")));
+        assert!(args.viewer_html.is_none());
         assert!(args.no_open);
+    }
+
+    #[test]
+    fn parses_external_viewer_template() {
+        let cli = Cli::try_parse_from([
+            "codexctl",
+            "view",
+            "sample-session.jsonl",
+            "--viewer-html",
+            "viewer.html",
+        ])
+        .unwrap();
+        let Commands::View(args) = cli.command else {
+            panic!("expected view command");
+        };
+        assert_eq!(args.viewer_html, Some(PathBuf::from("viewer.html")));
     }
 
     #[test]

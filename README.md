@@ -198,6 +198,8 @@ codexctl session start \
   --detach
 
 codexctl session list --threads
+codexctl session read --run-id <run-id>
+codexctl session watch --run-id <run-id>
 codexctl view --run-id <run-id>
 
 codexctl session answer \
@@ -229,18 +231,36 @@ open the run's local Codex rollout JSONL in the bundled viewer. Use
 `--pick recommended`, `--pick first`, or `--pick 1,2,1` to answer pending
 structured questions without copying exact option labels.
 
+Use `codexctl session read --run-id <run-id>` for a nonblocking compact snapshot.
+Add `--full` for the full run state. Use `codexctl session watch --run-id <run-id>`
+to stream JSONL snapshots until the run reaches `needs_input`, `completed`, or
+`failed`.
+
+Session commands use semantic exit codes for app wrappers:
+
+```text
+0   completed or read/list success
+1   failed
+20  needs_input
+21  still running
+22  stopped
+```
+
 Local JSONL viewer:
 
 ```bash
 codexctl view ~/.codex/sessions/2026/05/05/rollout-<thread-id>.jsonl
 codexctl view --run-id <run-id>
 codexctl view sample-session.jsonl --no-open --out target/view.html
+codexctl view rollout.jsonl --viewer-html /path/to/viewer.html
 ```
 
-The viewer only loads local JSONL. `--run-id` is a convenience lookup that asks
-the daemon for the run's `thread_path`, then loads that file. `run-id` is only
-valid while the local daemon still has the run in memory; after a daemon restart,
-open the durable `thread_path` directly:
+The viewer only loads local JSONL. By default it uses the viewer bundled into the
+binary; pass `--viewer-html` to use an external editable viewer template.
+`--run-id` is a convenience lookup that asks the daemon for the run's
+`thread_path`, then loads that file. `run-id` is only valid while the local
+daemon still has the run in memory; after a daemon restart, open the durable
+`thread_path` directly:
 
 ```bash
 codexctl view <thread-path>

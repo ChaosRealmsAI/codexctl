@@ -12,7 +12,7 @@ use anyhow::Result;
 use clap::Parser;
 use serde_json::json;
 
-use cli::{Cli, Commands, DaemonCommand};
+use cli::{Cli, Commands, DaemonCommand, SessionCommand};
 use commands::{
     build_answer, compact_thread_read, initialized_server, run_account, run_doctor, run_goal,
     run_guide, run_models, run_plan, run_quota,
@@ -111,14 +111,45 @@ fn main() -> Result<()> {
             log_mode,
             args,
         )?),
-        Commands::Session(command) => print_json(run_session_command(
-            socket_path,
-            codex_bin,
-            codex_home,
-            log_dir,
-            log_mode,
-            command,
-        )?),
+        Commands::Session(command) => {
+            let prints_jsonl = matches!(&command, SessionCommand::Watch(_));
+            let semantic_exit = matches!(
+                &command,
+                SessionCommand::Start(_)
+                    | SessionCommand::Answer(_)
+                    | SessionCommand::Send(_)
+                    | SessionCommand::Execute(_)
+                    | SessionCommand::Watch(_)
+            );
+            let result = run_session_command(
+                socket_path,
+                codex_bin,
+                codex_home,
+                log_dir,
+                log_mode,
+                command,
+            )?;
+            if !prints_jsonl {
+                print_json(result.clone())?;
+            }
+            if semantic_exit {
+                exit_for_session_status(&result);
+            }
+            Ok(())
+        }
         Commands::Daemon(command) => print_json(run_daemon_command(socket_path, command)?),
+    }
+}
+
+fn exit_for_session_status(result: &serde_json::Value) {
+    let code = match result.get("status").and_then(serde_json::Value::as_str) {
+        Some("failed") => 1,
+        Some("needs_input") => 20,
+        Some("running") => 21,
+        Some("stopped") => 22,
+        _ => 0,
+    };
+    if code != 0 {
+        std::process::exit(code);
     }
 }
