@@ -6,6 +6,22 @@ The binary is `codexctl`. It speaks Codex app-server JSONL, adds stable
 high-level commands for Goal, Plan, and structured follow-up questions, and
 keeps raw access to all app-server methods through `raw`.
 
+## Requirements
+
+- Rust toolchain for building from source.
+- Codex CLI with `app-server --listen stdio://` support.
+- macOS or Linux for CLI-only long sessions through a Unix socket.
+
+## Install
+
+From this repository:
+
+```bash
+cargo install --path . --force
+codexctl --help
+codexctl doctor
+```
+
 By default, the wrapper runs `codex` and clears `CODEX_HOME` for the spawned
 Codex process. That means it uses the installed Codex CLI and Codex's normal
 default account/config/session directory. Use explicit flags only when you need
@@ -30,6 +46,10 @@ codexctl --codex-home ~/.codex-e-codex doctor
 
 Use `--codex-bin` only for another installed binary or wrapper. Use both flags
 only when the executable and account/session home both differ.
+
+Local rollout logs and sample `.jsonl` files are intentionally ignored by git.
+They may include large session transcripts and should stay local unless a
+specific fixture is reviewed and explicitly tracked.
 
 ## Build
 
