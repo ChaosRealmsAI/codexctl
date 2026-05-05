@@ -19,6 +19,8 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
 
   6. Inspect command-specific help before wiring an app:
        codex-app plan --help
+       codex-app session --help
+       codex-app session start --help
        codex-app goal --help
        codex-app goal set --help
        codex-app read --help
@@ -30,6 +32,7 @@ Global options:
   --account-home <dir>   Alias for --codex-home.
   --log-dir <dir>        Fixed JSONL log directory. Example: target/codex-app-logs.
   --log-mode <mode>      off disables logs, summary writes compact protocol summaries, full writes full JSON messages.
+  --session-socket <p>   Unix socket for CLI-only long sessions. Default: /tmp/codex-app-<user>.sock.
 
 Highest permission mode:
   --dangerously-full-access is an alias for --full-auto.
@@ -270,4 +273,62 @@ Output shape:
   }
 
 Use with plan --question-mode external when another process wants to build the response payload.
+"#;
+
+pub(crate) const SESSION_AFTER_HELP: &str = r#"CLI-only long session flow:
+  1. Start a run. The daemon keeps app-server alive and returns when a question or completion appears.
+       codex-app session start --prompt-file input.md --dangerously-full-access
+
+  2. Answer a structured question by run id.
+       codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
+
+  3. Send a normal follow-up on the same run, for example plan confirmation.
+       codex-app session send --run-id <run_id> --prompt "I confirm this plan. Continue."
+
+  4. Read or stop the run.
+       codex-app session read --run-id <run_id>
+       codex-app session stop --run-id <run_id>
+
+Return types:
+  needs_input            The model asked structured request_user_input questions. Show questions to the caller, then call session answer.
+  completed              The turn completed. Show agent_messages/plans to the caller. Use session send for the next user turn.
+  failed                 The app-server returned an error.
+  warning                Warnings are included in the response but do not always stop the run.
+
+The caller only uses CLI commands. The local daemon is an implementation detail and is auto-started by session commands.
+"#;
+
+pub(crate) const SESSION_START_AFTER_HELP: &str = r#"Examples:
+  codex-app session start --prompt-file input.md --dangerously-full-access
+  codex-app session start --objective "Plan the feature" --token-budget unlimited --timeout unlimited --prompt "Ask one question first."
+
+Output:
+  run_id                 Stable id for future CLI calls.
+  thread_id              Codex app-server thread id.
+  status                 needs_input, completed, or failed.
+  questions              Present when status=needs_input.
+  agent_messages/plans   Present when the model produced visible output.
+"#;
+
+pub(crate) const SESSION_ANSWER_AFTER_HELP: &str = r#"Examples:
+  codex-app session answer --run-id <run_id> --answer scope="A Small plan (Recommended)"
+  codex-app session answer --run-id <run_id> --answers-json '{"scope":{"answers":["A Small plan (Recommended)"]}}'
+
+Output:
+  Same shape as session start. It returns after the next question or completion.
+"#;
+
+pub(crate) const SESSION_SEND_AFTER_HELP: &str = r#"Examples:
+  codex-app session send --run-id <run_id> --prompt "I confirm this plan. Continue."
+  codex-app session send --run-id <run_id> --prompt-file follow-up.md --timeout unlimited
+
+Use this for normal multi-turn conversation on the same run after a turn completes.
+"#;
+
+pub(crate) const DAEMON_AFTER_HELP: &str = r#"Examples:
+  codex-app daemon status
+  codex-app daemon start
+  codex-app daemon stop
+
+Session commands auto-start the daemon. Manual daemon commands are for debugging.
 "#;

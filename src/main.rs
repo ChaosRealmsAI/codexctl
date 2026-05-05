@@ -4,6 +4,7 @@ mod commands;
 mod help;
 mod logging;
 mod methods;
+mod session;
 mod util;
 
 use anyhow::Result;
@@ -15,6 +16,7 @@ use commands::{
     build_answer, compact_thread_read, initialized_server, run_doctor, run_goal, run_plan,
 };
 use methods::KNOWN_METHODS;
+use session::{default_socket_path, run_daemon_command, run_session_command};
 use util::{print_json, read_params};
 
 fn main() -> Result<()> {
@@ -23,8 +25,10 @@ fn main() -> Result<()> {
         codex_home,
         log_dir,
         log_mode,
+        session_socket,
         command,
     } = Cli::parse();
+    let socket_path = session_socket.unwrap_or_else(default_socket_path);
     match command {
         Commands::Doctor => print_json(run_doctor(&codex_bin, codex_home, log_dir, log_mode)?),
         Commands::Methods => print_json(json!({ "ok": true, "methods": KNOWN_METHODS })),
@@ -67,5 +71,14 @@ fn main() -> Result<()> {
             print_json(result)
         }
         Commands::Answer(args) => print_json(build_answer(args)?),
+        Commands::Session(command) => print_json(run_session_command(
+            socket_path,
+            codex_bin,
+            codex_home,
+            log_dir,
+            log_mode,
+            command,
+        )?),
+        Commands::Daemon(command) => print_json(run_daemon_command(socket_path, command)?),
     }
 }

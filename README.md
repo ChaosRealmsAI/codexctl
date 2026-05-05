@@ -87,6 +87,32 @@ codex-app plan --prompt-file input.md --token-budget unlimited --timeout unlimit
 codex-app --codex-home ~/.codex-work plan --prompt-file input.md --dangerously-full-access
 ```
 
+CLI-only long sessions:
+
+```bash
+codex-app session start \
+  --prompt-file input.md \
+  --token-budget unlimited \
+  --timeout unlimited \
+  --dangerously-full-access
+
+codex-app session answer \
+  --run-id <run-id> \
+  --answer 'scope=A Small plan (Recommended)'
+
+codex-app session send \
+  --run-id <run-id> \
+  --prompt "I confirm this plan. Continue."
+
+codex-app session read --run-id <run-id>
+codex-app session stop --run-id <run-id>
+```
+
+`session` commands auto-start a local daemon and communicate through a Unix
+socket. The caller still only invokes CLI commands. The daemon keeps the
+app-server process, thread, pending structured question, and run state alive
+between CLI calls.
+
 Highest local authority:
 
 ```bash
@@ -169,6 +195,7 @@ most useful to automation:
 - collaboration modes
 - thread Goal
 - Plan turns
+- CLI-only multi-round session runs
 - structured question answering
 - high-permission execution switch
 - logs and summaries

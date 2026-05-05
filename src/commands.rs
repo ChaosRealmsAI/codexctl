@@ -431,7 +431,7 @@ pub(crate) fn compact_thread_read(response: Value) -> Value {
     })
 }
 
-fn start_thread(
+pub(crate) fn start_thread(
     server: &mut AppServer,
     runtime: &EffectiveRuntime,
     model: Option<&str>,

@@ -48,6 +48,13 @@ pub struct Cli {
         help = "Log protocol traffic: off, compact summaries, or full JSON messages"
     )]
     pub log_mode: LogMode,
+    #[arg(
+        long,
+        global = true,
+        value_name = "PATH",
+        help = "Unix socket path for CLI-only long sessions; defaults to /tmp/codex-app-<user>.sock"
+    )]
+    pub session_socket: Option<PathBuf>,
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -100,6 +107,18 @@ pub enum Commands {
         after_help = help::ANSWER_AFTER_HELP
     )]
     Answer(AnswerArgs),
+    #[command(
+        subcommand,
+        about = "Run CLI-only multi-round sessions through a local daemon",
+        after_help = help::SESSION_AFTER_HELP
+    )]
+    Session(SessionCommand),
+    #[command(
+        subcommand,
+        about = "Manage the local codex-app session daemon",
+        after_help = help::DAEMON_AFTER_HELP
+    )]
+    Daemon(DaemonCommand),
 }
 
 #[derive(Debug, Args)]
@@ -230,6 +249,130 @@ pub struct PlanArgs {
     pub timeout: RunTimeout,
     #[command(flatten)]
     pub runtime: RuntimeArgs,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SessionCommand {
+    #[command(
+        about = "Start a long session and stop at the first question or completion",
+        after_help = help::SESSION_START_AFTER_HELP
+    )]
+    Start(SessionStartArgs),
+    #[command(
+        about = "Answer a pending structured question and continue the same run",
+        after_help = help::SESSION_ANSWER_AFTER_HELP
+    )]
+    Answer(SessionAnswerArgs),
+    #[command(
+        about = "Send a normal follow-up message on the same run",
+        after_help = help::SESSION_SEND_AFTER_HELP
+    )]
+    Send(SessionSendArgs),
+    #[command(about = "Read in-memory run state from the daemon")]
+    Read(SessionRunIdArgs),
+    #[command(about = "Stop one run and release its app-server process")]
+    Stop(SessionRunIdArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DaemonCommand {
+    #[command(about = "Start the local session daemon if it is not running")]
+    Start,
+    #[command(about = "Check whether the local session daemon is running")]
+    Status,
+    #[command(about = "Stop the local session daemon")]
+    Stop,
+    #[command(hide = true)]
+    Serve,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionStartArgs {
+    #[arg(
+        long,
+        conflicts_with = "prompt_file",
+        help = "Inline user prompt sent to the Plan-mode turn"
+    )]
+    pub prompt: Option<String>,
+    #[arg(
+        long,
+        help = "File containing the user prompt sent to the Plan-mode turn"
+    )]
+    pub prompt_file: Option<PathBuf>,
+    #[arg(long, help = "Set a thread goal before turn/start")]
+    pub objective: Option<String>,
+    #[arg(
+        long,
+        default_value_t = TokenBudget::Unlimited,
+        help = "Goal token budget used only when --objective is set"
+    )]
+    pub token_budget: TokenBudget,
+    #[arg(long, value_enum, default_value_t = Effort::Medium)]
+    pub effort: Effort,
+    #[arg(long, help = "Override model used in collaborationMode settings")]
+    pub model: Option<String>,
+    #[arg(
+        long = "timeout",
+        visible_alias = "timeout-secs",
+        default_value_t = RunTimeout::Unlimited,
+        help = "Maximum wait time for one app-server event: seconds or unlimited"
+    )]
+    pub timeout: RunTimeout,
+    #[command(flatten)]
+    pub runtime: RuntimeArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionAnswerArgs {
+    #[arg(long, help = "Run id returned by codex-app session start")]
+    pub run_id: String,
+    #[arg(
+        long = "answer",
+        help = "Answer in QUESTION_ID=SELECTED_LABEL form; repeat for multiple questions"
+    )]
+    pub answers: Vec<String>,
+    #[arg(
+        long,
+        conflicts_with = "answers_file",
+        help = "Raw answers JSON object"
+    )]
+    pub answers_json: Option<String>,
+    #[arg(long, help = "File containing raw answers JSON object")]
+    pub answers_file: Option<PathBuf>,
+    #[arg(
+        long = "timeout",
+        visible_alias = "timeout-secs",
+        default_value_t = RunTimeout::Unlimited,
+        help = "Maximum wait time for one app-server event: seconds or unlimited"
+    )]
+    pub timeout: RunTimeout,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionSendArgs {
+    #[arg(long, help = "Run id returned by codex-app session start")]
+    pub run_id: String,
+    #[arg(long, conflicts_with = "prompt_file", help = "Inline follow-up prompt")]
+    pub prompt: Option<String>,
+    #[arg(long, help = "File containing the follow-up prompt")]
+    pub prompt_file: Option<PathBuf>,
+    #[arg(long, value_enum, default_value_t = Effort::Medium)]
+    pub effort: Effort,
+    #[arg(long, help = "Override model used in collaborationMode settings")]
+    pub model: Option<String>,
+    #[arg(
+        long = "timeout",
+        visible_alias = "timeout-secs",
+        default_value_t = RunTimeout::Unlimited,
+        help = "Maximum wait time for one app-server event: seconds or unlimited"
+    )]
+    pub timeout: RunTimeout,
+}
+
+#[derive(Debug, Args)]
+pub struct SessionRunIdArgs {
+    #[arg(long, help = "Run id returned by codex-app session start")]
+    pub run_id: String,
 }
 
 #[derive(Debug, Args)]
