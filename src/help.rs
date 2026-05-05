@@ -7,6 +7,7 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
        cargo install --git https://github.com/ChaosRealmsAI/codexctl --tag v0.1.0 --force
 
   3. Discover app-server protocol names:
+       codexctl guide
        codexctl methods
        codexctl modes
        codexctl features
@@ -31,6 +32,7 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
 
   7. Inspect command-specific help before wiring an app:
        codexctl account --help
+       codexctl guide --help
        codexctl quota --help
        codexctl models --help
        codexctl status --help
@@ -46,7 +48,7 @@ pub(crate) const ROOT_AFTER_HELP: &str = r#"Quick start:
        codexctl raw --help
 
 Command index:
-  Health/account         doctor, account, quota, models, status
+  Health/account         doctor, guide, account, quota, models, status
   Protocol discovery     methods, modes, features, raw
   Threads/goals          read, goal set, goal get, goal clear
   One-shot planning      plan, answer
@@ -67,6 +69,7 @@ Install and project:
 
 Workflow chooser:
   doctor                 First command on a machine; proves Codex app-server starts.
+  guide                  Official Codex guidance mapped to codexctl Plan, Goal, session, permissions, and effort.
   models                 Check available model ids and supported reasoning efforts before hardcoding automation.
   quota                  Check account limits before starting long or parallel runs.
   goal set/get/clear     Store a durable objective on a thread. Use before long work so later turns know what "done" means.
@@ -81,7 +84,8 @@ Global options:
   --account-home <dir>   Alias for --codex-home.
   --log-dir <dir>        Fixed JSONL log directory. Example: target/codexctl-logs.
   --log-mode <mode>      off disables logs, summary writes compact protocol summaries, full writes full JSON messages.
-  --session-socket <p>   Unix socket for CLI-only long sessions. Default: /tmp/codexctl-<user>.sock.
+  --session-socket <p>   Daemon endpoint path for CLI-only long sessions.
+                          Unix/macOS use a Unix socket. Windows uses a temp file containing a localhost TCP endpoint.
 
 Highest permission mode:
   --dangerously-full-access is an alias for --full-auto.
@@ -137,6 +141,65 @@ Output:
   app_server             initialization status, codex_home, and collaboration modes.
   log_path               Per-run JSONL log path when logging is enabled.
   latest_log_path        Stable latest.jsonl path when logging is enabled.
+"#;
+
+pub(crate) const GUIDE_AFTER_HELP: &str = r#"What it is:
+  A compact, machine-readable guide that maps official Codex guidance to codexctl.
+
+Official basis:
+  Codex best practices recommend giving Goal, Context, Constraints, and Done-when.
+  For complex or ambiguous tasks, official Codex guidance recommends Plan mode before coding.
+  Codex CLI exposes /plan for execution plans, /model for model and effort, /permissions for local authority, /resume for saved sessions, /review for review, and /status for session state.
+  Codex app-server exposes thread/start, thread/resume, turn/start, turn/interrupt, model/list, collaborationMode/list, experimental thread/goal/*, and experimental tool/requestUserInput.
+  Official reasoning-effort guidance says medium is the default balance, low is for simple work, high is for planning/debugging/code reasoning, and xhigh should be reserved for cases where latency is justified.
+
+codexctl recommendation:
+  Use Plan-first `session` for app integrations, not one-shot `plan`.
+  The caller only invokes CLI commands and keeps using run_id/thread_id between rounds.
+  A turn stops at a blocking boundary:
+    needs_input       show structured questions, then call session answer
+    completed         show plan/message, then call session send or session execute
+    failed            show error/log_path
+    running           inspect with codexctl view --run-id or codexctl view <thread_path>
+
+Typical app workflow:
+  codexctl doctor
+  codexctl guide
+  codexctl models
+  codexctl quota
+  codexctl session start --prompt-file input.md --sandbox workspace-write --approval-policy never
+  codexctl session answer --run-id <run_id> --pick recommended
+  codexctl session send --run-id <run_id> --prompt "I confirm this plan."
+  codexctl session execute --run-id <run_id>
+
+Goal guidance:
+  Use Goal for durable objectives on long or resumable work.
+  Goal is backed by experimental app-server thread/goal/set, thread/goal/get, and thread/goal/clear.
+  Avoid Goal for account, quota, model list, and one-off raw probes.
+
+Prompt template:
+  Goal: what should change or be built.
+  Context: relevant files, folders, docs, examples, errors, or constraints.
+  Constraints: architecture, safety, permissions, style, and do-not rules.
+  Done when: tests, verification commands, evidence, and review criteria.
+  For codexctl sessions: say whether Plan mode must ask structured questions first and what approval unlocks execution.
+
+Plan nuance:
+  Official direct API Codex prompting guidance warns against unnecessary upfront plans and preambles because they can interrupt autonomous rollouts.
+  codexctl recommends Plan-first only when a human/app approval checkpoint, structured questions, or architecture alignment is required.
+  After approval, use session execute for the default-mode implementation turn.
+  If the later execute turn must edit files, start the session with workspace-write or danger-full-access.
+
+Output:
+  JSON with recommended_default, prompt_shape, plan_mode, event_contract, goal, models_and_effort, permissions, and official_sources.
+
+Sources:
+  https://developers.openai.com/codex/learn/best-practices
+  https://developers.openai.com/codex/cli/slash-commands
+  https://developers.openai.com/codex/app-server#api-overview
+  https://developers.openai.com/codex/config-reference
+  https://developers.openai.com/api/docs/guides/deployment-checklist#set-up-reasoningeffort
+  https://developers.openai.com/api/docs/guides/prompt-guidance#gpt-5.3-codex-prompting-guide
 "#;
 
 pub(crate) const METHODS_AFTER_HELP: &str = r#"Examples:
@@ -517,6 +580,7 @@ Run response fields:
 
 Use `session` rather than one-shot `plan` for app integrations that need question answering, plan confirmation, execution, or later inspection.
 The caller only uses CLI commands. The local daemon is an implementation detail and is auto-started by session commands.
+On Unix/macOS the daemon uses a Unix socket. On Windows it uses localhost TCP and stores the endpoint in the --session-socket path.
 
 Model, effort, and permissions:
   session start          Accepts --model, --effort/--reasoning-effort, --sandbox, --approval-policy, and --dangerously-full-access.

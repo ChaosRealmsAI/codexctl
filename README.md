@@ -1,5 +1,7 @@
 # codexctl
 
+[![CI](https://github.com/ChaosRealmsAI/codexctl/actions/workflows/ci.yml/badge.svg)](https://github.com/ChaosRealmsAI/codexctl/actions/workflows/ci.yml)
+
 Rust CLI wrapper around `codex app-server --listen stdio://`.
 
 The binary is `codexctl`. It speaks Codex app-server JSONL, adds stable
@@ -10,7 +12,7 @@ keeps raw access to all app-server methods through `raw`.
 
 - Rust toolchain for building from source.
 - Codex CLI with `app-server --listen stdio://` support.
-- macOS or Linux for CLI-only long sessions through a Unix socket.
+- macOS, Linux, or Windows.
 
 ## Install
 
@@ -20,10 +22,22 @@ One-command install from GitHub:
 curl -fsSL https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.sh | sh
 ```
 
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.ps1 | iex
+```
+
 Pinned release install:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.sh | CODEXCTL_TAG=v0.1.0 sh
+```
+
+Pinned Windows PowerShell install:
+
+```powershell
+$env:CODEXCTL_TAG="v0.1.0"; irm https://raw.githubusercontent.com/ChaosRealmsAI/codexctl/main/install.ps1 | iex
 ```
 
 Direct Cargo install:
@@ -75,6 +89,8 @@ specific fixture is reviewed and explicitly tracked.
 cargo build
 ```
 
+Cross-platform CI runs on Linux, macOS, and Windows.
+
 ## Fixed Logs
 
 Default logs are written to:
@@ -105,6 +121,7 @@ keeps full JSON messages.
 
 ```bash
 codexctl doctor
+codexctl guide
 codexctl methods
 codexctl modes
 codexctl features
@@ -115,6 +132,24 @@ codexctl status
 codexctl read --thread-id <thread-id> --compact
 codexctl view ~/.codex/sessions/2026/05/05/rollout-<thread-id>.jsonl
 codexctl --codex-home ~/.codex-work read --thread-id <thread-id> --compact
+```
+
+Official workflow guide:
+
+```bash
+codexctl guide
+codexctl guide --help
+```
+
+`guide` maps official Codex best practices, Plan mode, Goal, model/effort,
+permissions, and app-server multi-turn APIs to the `codexctl` session workflow.
+For app integrations, the recommended path is Plan-first `session`:
+
+```bash
+codexctl session start --prompt-file input.md --sandbox workspace-write --approval-policy never
+codexctl session answer --run-id <run-id> --pick recommended
+codexctl session send --run-id <run-id> --prompt "I confirm this plan."
+codexctl session execute --run-id <run-id>
 ```
 
 Generic method access:
@@ -182,10 +217,11 @@ codexctl session interrupt --run-id <run-id>
 codexctl session stop --run-id <run-id>
 ```
 
-`session` commands auto-start a local daemon and communicate through a Unix
-socket. The caller still only invokes CLI commands. The daemon keeps the
-app-server process, thread, pending structured question, and run state alive
-between CLI calls.
+`session` commands auto-start a local daemon. Unix/macOS use a Unix socket;
+Windows uses localhost TCP and stores the endpoint in the `--session-socket`
+path. The caller still only invokes CLI commands. The daemon keeps the app-server
+process, thread, pending structured question, and run state alive between CLI
+calls.
 
 Use `--detach` on `session start`, `session answer`, or `session send` when the
 caller wants to return immediately. Use `codexctl view --run-id <run-id>` to

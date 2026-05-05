@@ -65,6 +65,82 @@ pub(crate) fn initialized_server(
     Ok(server)
 }
 
+pub(crate) fn run_guide() -> Value {
+    json!({
+        "ok": true,
+        "kind": "codexctl-guide",
+        "summary": "Official Codex guidance mapped to codexctl's CLI-only multi-turn workflow.",
+        "recommended_default": {
+            "mode": "session",
+            "reason": "Use the daemon-backed session commands when the caller can only invoke CLI commands but needs multiple turns, structured questions, plan confirmation, execution, resume, and inspection.",
+            "first_commands": [
+                "codexctl doctor",
+                "codexctl guide",
+                "codexctl models",
+                "codexctl quota",
+                "codexctl session start --prompt-file input.md --sandbox workspace-write --approval-policy never",
+                "codexctl session answer --run-id <run_id> --pick recommended",
+                "codexctl session send --run-id <run_id> --prompt \"I confirm this plan.\"",
+                "codexctl session execute --run-id <run_id>"
+            ]
+        },
+        "prompt_shape": {
+            "official_default_fields": [
+                "Goal: what to change or build.",
+                "Context: relevant files, folders, docs, examples, or errors.",
+                "Constraints: standards, architecture, safety requirements, or conventions.",
+                "Done when: tests, behavior, evidence, or review criteria that prove completion."
+            ],
+            "codexctl_additions": [
+                "State whether the first turn must be Plan mode.",
+                "State whether structured request_user_input questions are expected.",
+                "State what the caller should approve before session execute.",
+                "State verification commands and evidence paths when implementation is allowed."
+            ]
+        },
+        "plan_mode": {
+            "official_use": "Use Plan mode for complex, ambiguous, or hard-to-describe tasks before coding.",
+            "codexctl_use": "Prefer `session start` for app integrations. It starts in Plan mode and stops at needs_input or completed so the caller can show questions or approve the plan. If execution will edit files later, start the thread with workspace-write or danger-full-access up front.",
+            "one_shot_use": "Use `codexctl plan` only for smoke tests or a single planning turn.",
+            "important_nuance": "Official direct API Codex prompting guidance also warns against unnecessary upfront plans and preambles because they can interrupt autonomous rollouts. For codexctl, Plan-first is recommended when a human/app approval checkpoint is required; for uninterrupted execution after approval, use `session execute`."
+        },
+        "event_contract": {
+            "needs_input": "Codex emitted a structured request_user_input prompt. Show the questions/options to the caller, then call `codexctl session answer --run-id <run_id> ...`.",
+            "completed": "The current turn finished. Show plans/agent_messages to the caller, then either call `session send` for another planning turn or `session execute` after approval.",
+            "running": "A detached turn is still active. Open the local rollout JSONL with `codexctl view --run-id <run_id>` or `codexctl view <thread_path>`.",
+            "failed": "The app-server call or run failed. Surface errors and log_path.",
+            "stopped": "The daemon released that run."
+        },
+        "goal": {
+            "official_api": "app-server exposes experimental thread/goal/set, thread/goal/get, and thread/goal/clear methods.",
+            "codexctl_use": "Use Goal for long or resumable work where the durable objective and done criteria should stay attached to the thread.",
+            "avoid_for": "Do not use Goal for account checks, model listing, quota checks, or one-off raw protocol probes.",
+            "budget": "`--token-budget unlimited` omits tokenBudget and leaves the goal uncapped."
+        },
+        "models_and_effort": {
+            "discover": "Run `codexctl models` before hardcoding a model or effort.",
+            "medium": "Default balance for interactive planning and coding.",
+            "low": "Use for simple extraction, routing, classification, small checks, or short replies.",
+            "high": "Use for debugging, implementation, comparison, plans, and reasoning through code.",
+            "xhigh": "Reserve for hard architecture, risky refactors, or long autonomous work where latency is justified by evals."
+        },
+        "permissions": {
+            "read_only": "Use for planning, audits, reads, account, quota, models, and thread inspection.",
+            "workspace_write": "Use when Codex should edit files inside the workspace.",
+            "danger_full_access": "Use only for trusted local automation. `--dangerously-full-access` maps to sandbox=danger-full-access and approvalPolicy=never.",
+            "approval_policy": "Prefer on-request only when the client can surface approval prompts. Use never for codexctl CLI-only automation. on-failure is deprecated in official config guidance."
+        },
+        "official_sources": [
+            "https://developers.openai.com/codex/learn/best-practices",
+            "https://developers.openai.com/codex/cli/slash-commands",
+            "https://developers.openai.com/codex/app-server#api-overview",
+            "https://developers.openai.com/codex/config-reference",
+            "https://developers.openai.com/api/docs/guides/deployment-checklist#set-up-reasoningeffort",
+            "https://developers.openai.com/api/docs/guides/prompt-guidance#gpt-5.3-codex-prompting-guide"
+        ]
+    })
+}
+
 pub(crate) fn run_goal(server: &mut AppServer, command: GoalCommand) -> Result<Value> {
     match command {
         GoalCommand::Set(args) => {
@@ -615,7 +691,7 @@ mod tests {
 
     use crate::cli::AnswerArgs;
 
-    use super::{build_answer, compact_thread_read, select_recommended};
+    use super::{build_answer, compact_thread_read, run_guide, select_recommended};
 
     #[test]
     fn selects_recommended_option() {
@@ -637,6 +713,25 @@ mod tests {
         })
         .unwrap();
         assert_eq!(payload["answers"]["scope"]["answers"][0], "A");
+    }
+
+    #[test]
+    fn guide_contains_official_sources_and_event_contract() {
+        let guide = run_guide();
+        assert_eq!(guide["ok"], true);
+        assert!(
+            guide["official_sources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|source| {
+                    source
+                        .as_str()
+                        .unwrap()
+                        .contains("developers.openai.com/codex/learn/best-practices")
+                })
+        );
+        assert!(guide["event_contract"]["needs_input"].is_string());
     }
 
     #[test]

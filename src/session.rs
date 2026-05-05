@@ -1,7 +1,11 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(windows)]
+use std::net::{TcpListener, TcpStream};
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -27,8 +31,11 @@ use crate::util::{
 const DEFAULT_THREAD_MODEL: &str = "gpt-5.5";
 
 pub(crate) fn default_socket_path() -> PathBuf {
-    let user = std::env::var("USER").unwrap_or_else(|_| "default".to_string());
-    std::env::temp_dir().join(format!("codexctl-{user}.sock"))
+    let user = std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "default".to_string());
+    let suffix = if cfg!(windows) { "endpoint" } else { "sock" };
+    std::env::temp_dir().join(format!("codexctl-{user}.{suffix}"))
 }
 
 pub(crate) fn run_daemon_command(socket_path: PathBuf, command: DaemonCommand) -> Result<Value> {
@@ -238,6 +245,7 @@ fn ensure_daemon(socket_path: &Path) -> Result<Value> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    #[cfg(unix)]
     command.process_group(0);
     command.spawn().context("spawn codexctl daemon")?;
     for _ in 0..50 {
@@ -255,9 +263,27 @@ fn ensure_daemon(socket_path: &Path) -> Result<Value> {
     bail!("daemon did not start at {}", socket_path.display())
 }
 
+#[cfg(unix)]
 fn send_request(socket_path: &Path, request: Value) -> Result<Value> {
     let mut stream = UnixStream::connect(socket_path)
         .with_context(|| format!("connect daemon socket {}", socket_path.display()))?;
+    send_request_on_stream(&mut stream, request)
+}
+
+#[cfg(windows)]
+fn send_request(socket_path: &Path, request: Value) -> Result<Value> {
+    let endpoint = fs::read_to_string(socket_path)
+        .with_context(|| format!("read daemon endpoint {}", socket_path.display()))?;
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty() {
+        bail!("daemon endpoint file is empty: {}", socket_path.display());
+    }
+    let mut stream = TcpStream::connect(endpoint)
+        .with_context(|| format!("connect daemon endpoint {endpoint}"))?;
+    send_request_on_stream(&mut stream, request)
+}
+
+fn send_request_on_stream<S: Read + Write>(stream: &mut S, request: Value) -> Result<Value> {
     writeln!(stream, "{request}")?;
     stream.flush()?;
     let mut reader = BufReader::new(stream);
@@ -269,6 +295,7 @@ fn send_request(socket_path: &Path, request: Value) -> Result<Value> {
     serde_json::from_str(line.trim()).context("daemon returned invalid JSON")
 }
 
+#[cfg(unix)]
 fn serve(socket_path: PathBuf) -> Result<Value> {
     if socket_path.exists() {
         fs::remove_file(&socket_path)
@@ -290,13 +317,44 @@ fn serve(socket_path: PathBuf) -> Result<Value> {
     Ok(json!({ "ok": true, "status": "stopped" }))
 }
 
+#[cfg(windows)]
+fn serve(socket_path: PathBuf) -> Result<Value> {
+    if socket_path.exists() {
+        fs::remove_file(&socket_path)
+            .with_context(|| format!("remove stale endpoint {}", socket_path.display()))?;
+    }
+    if let Some(parent) = socket_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create endpoint dir {}", parent.display()))?;
+    }
+    let listener = TcpListener::bind("127.0.0.1:0").context("bind daemon TCP listener")?;
+    let endpoint = listener
+        .local_addr()
+        .context("read daemon TCP listener address")?
+        .to_string();
+    fs::write(&socket_path, &endpoint)
+        .with_context(|| format!("write daemon endpoint {}", socket_path.display()))?;
+    let mut daemon = SessionDaemon::default();
+    for stream in listener.incoming() {
+        let Ok(stream) = stream else {
+            continue;
+        };
+        let should_stop = daemon.handle_stream(stream).unwrap_or_default();
+        if should_stop {
+            break;
+        }
+    }
+    let _ = fs::remove_file(&socket_path);
+    Ok(json!({ "ok": true, "status": "stopped" }))
+}
+
 #[derive(Default)]
 struct SessionDaemon {
     runs: HashMap<String, RunHandle>,
 }
 
 impl SessionDaemon {
-    fn handle_stream(&mut self, mut stream: UnixStream) -> Result<bool> {
+    fn handle_stream<S: Read + Write>(&mut self, mut stream: S) -> Result<bool> {
         let mut line = String::new();
         {
             let mut reader = BufReader::new(&mut stream);

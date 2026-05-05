@@ -53,7 +53,7 @@ pub struct Cli {
         long,
         global = true,
         value_name = "PATH",
-        help = "Unix socket path for CLI-only long sessions; defaults to /tmp/codexctl-<user>.sock"
+        help = "Daemon endpoint path for CLI-only long sessions; defaults to a temp codexctl endpoint"
     )]
     pub session_socket: Option<PathBuf>,
     #[command(subcommand)]
@@ -67,6 +67,11 @@ pub enum Commands {
         after_help = help::DOCTOR_AFTER_HELP
     )]
     Doctor,
+    #[command(
+        about = "Show official Codex workflow guidance mapped to codexctl",
+        after_help = help::GUIDE_AFTER_HELP
+    )]
+    Guide,
     #[command(
         about = "List known app-server method names exposed through raw",
         after_help = help::METHODS_AFTER_HELP
@@ -819,6 +824,12 @@ mod tests {
         let cli = Cli::try_parse_from(["codexctl", "doctor"]).unwrap();
         assert!(cli.codex_home.is_none());
         assert!(matches!(cli.command, Commands::Doctor));
+    }
+
+    #[test]
+    fn parses_guide_command() {
+        let cli = Cli::try_parse_from(["codexctl", "guide"]).unwrap();
+        assert!(matches!(cli.command, Commands::Guide));
     }
 
     #[test]

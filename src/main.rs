@@ -15,7 +15,7 @@ use serde_json::json;
 use cli::{Cli, Commands, DaemonCommand};
 use commands::{
     build_answer, compact_thread_read, initialized_server, run_account, run_doctor, run_goal,
-    run_models, run_plan, run_quota,
+    run_guide, run_models, run_plan, run_quota,
 };
 use methods::KNOWN_METHODS;
 use session::{default_socket_path, run_daemon_command, run_session_command};
@@ -34,6 +34,7 @@ fn main() -> Result<()> {
     let socket_path = session_socket.unwrap_or_else(default_socket_path);
     match command {
         Commands::Doctor => print_json(run_doctor(&codex_bin, codex_home, log_dir, log_mode)?),
+        Commands::Guide => print_json(run_guide()),
         Commands::Methods => print_json(json!({ "ok": true, "methods": KNOWN_METHODS })),
         Commands::Modes => {
             let mut server = initialized_server(&codex_bin, codex_home, log_dir, log_mode)?;
