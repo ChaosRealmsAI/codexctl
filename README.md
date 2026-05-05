@@ -146,7 +146,14 @@ codexctl view sample-session.jsonl --no-open --out target/view.html
 ```
 
 The viewer only loads local JSONL. `--run-id` is a convenience lookup that asks
-the daemon for the run's `thread_path`, then loads that file.
+the daemon for the run's `thread_path`, then loads that file. The generated page
+shows a copyable resume command such as:
+
+```bash
+cd <cwd> && CODEX_HOME=<home> codex resume --include-non-interactive <thread-id>
+```
+
+When `--codex-bin` or `--codex-home` is supplied, the command uses those values.
 
 Highest local authority:
 

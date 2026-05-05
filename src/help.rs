@@ -337,6 +337,11 @@ What it opens:
   FILE                  A local Codex rollout JSONL file.
   --run-id <run_id>     The local thread_path backing an in-memory daemon run.
 
+Display:
+  The top of the generated page shows a copyable resume command:
+    cd <cwd> && CODEX_HOME=<home> <codex-bin> resume --include-non-interactive <thread_id>
+  CODEX_HOME is included when it is known from --codex-home or the rollout path.
+
 Parameters:
   --out <file>          Write the generated standalone HTML viewer to this path.
   --no-open             Generate the HTML but do not open a browser.

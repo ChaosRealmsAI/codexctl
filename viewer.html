@@ -81,6 +81,55 @@
   }
   .meta-row b { color: var(--text); font-weight: 500; margin-left: 4px; }
   .meta-divider { color: var(--border-strong); }
+  .meta-row.command-mode { display: block; }
+  .resume-command {
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.035);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .resume-command-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .resume-command-label {
+    color: var(--text-faint);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .resume-command code {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+  .resume-command-sub {
+    margin-top: 8px;
+    color: var(--text-faint);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .copy-command {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+  .copy-command:hover { border-color: var(--border-strong); color: var(--text); }
 
   /* stats chips */
   .stats {
@@ -672,7 +721,7 @@
 
   <label class="picker" id="picker">
     <input type="file" id="file">
-    <div>选 / 拖入任意文件 (jsonl / json)</div>
+    <div>选 / 拖入 Codex JSONL 文件</div>
     <div class="hint">~/.codex/sessions/**/rollout-*.jsonl</div>
   </label>
 
@@ -695,6 +744,67 @@
 
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+
+function normalizeSourceInfo(source) {
+  if (source && typeof source === 'object') return source;
+  return { name: source || '' };
+}
+
+function shellQuote(value) {
+  const text = String(value ?? '');
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return text;
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function deriveCodexHome(sourcePath) {
+  if (!sourcePath) return '';
+  const marker = '/sessions/';
+  const idx = String(sourcePath).indexOf(marker);
+  return idx > 0 ? String(sourcePath).slice(0, idx) : '';
+}
+
+function buildResumeCommand(meta, sourceInfo) {
+  const threadId = meta?.id || '';
+  if (!threadId) return '';
+  const cwd = meta.cwd || '';
+  const codexBin = sourceInfo.codexBin || 'codex';
+  const codexHome = sourceInfo.codexHome || meta.codex_home || deriveCodexHome(sourceInfo.sourcePath);
+  const env = codexHome ? `CODEX_HOME=${shellQuote(codexHome)} ` : '';
+  const resume = `${shellQuote(codexBin)} resume --include-non-interactive ${shellQuote(threadId)}`;
+  const command = `${env}${resume}`;
+  return cwd ? `cd ${shellQuote(cwd)} && ${command}` : command;
+}
+
+function renderResumeCommand(command, meta, sourceInfo) {
+  if (!command) {
+    return `<div class="resume-command"><span class="resume-command-label">resume command unavailable</span><code>thread id not found in this JSONL</code></div>`;
+  }
+  const details = [];
+  if (meta.id) details.push(`<span>thread ${escapeHtml(meta.id.slice(0, 8))}...</span>`);
+  if (sourceInfo.sourcePath) details.push(`<span>jsonl ${escapeHtml(sourceInfo.sourcePath)}</span>`);
+  return `
+    <div class="resume-command">
+      <div class="resume-command-top">
+        <span class="resume-command-label">resume command</span>
+        <button class="copy-command" type="button" data-copy-command="${escapeHtml(command)}">copy</button>
+      </div>
+      <code>${escapeHtml(command)}</code>
+      ${details.length ? `<div class="resume-command-sub">${details.join('')}</div>` : ''}
+    </div>`;
+}
+
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-copy-command]');
+  if (!button) return;
+  try {
+    await navigator.clipboard.writeText(button.dataset.copyCommand || '');
+    const oldText = button.textContent;
+    button.textContent = 'copied';
+    setTimeout(() => { button.textContent = oldText; }, 1200);
+  } catch (error) {
+    button.textContent = 'copy failed';
+  }
+});
 
 // ============== MARKDOWN (lightweight) ==============
 function renderMarkdown(md) {
@@ -1203,10 +1313,13 @@ function parseInput(text) {
   return { records, lineCount: lines.length, parseErrors, format: 'jsonl' };
 }
 
-function processSession(text, name) {
+function processSession(text, source) {
+  const sourceInfo = normalizeSourceInfo(source);
+  const name = sourceInfo.name || sourceInfo.sourcePath || 'rollout.jsonl';
   const parsed = parseInput(text);
   const events = parsed.records;
   const parseErrors = parsed.parseErrors;
+  $('picker').style.display = 'none';
   if (parseErrors > 0) {
     console.warn(`${parseErrors} 行解析失败 (共 ${parsed.lineCount} 行)`);
   }
@@ -1241,39 +1354,12 @@ function processSession(text, name) {
   const lastTokenEv = events.filter(e => e.payload?.type === 'token_count' && e.payload?.info?.total_token_usage).pop();
   const tokens = lastTokenEv?.payload?.info?.total_token_usage;
   const ctxWin = lastTokenEv?.payload?.info?.model_context_window;
-  const rate = lastTokenEv?.payload?.rate_limits;
-
-  // 真实 user prompt (剥离注入)
-  let realPrompt = '';
-  for (const ev of events) {
-    if (ev.type === 'response_item' && ev.payload?.type === 'message' && ev.payload?.role === 'user') {
-      const txt = (ev.payload.content || []).map(c => c.text || '').join('');
-      const { real } = stripInjections(txt);
-      if (real) { realPrompt = real.slice(0, 200); break; }
-    }
-  }
-
-  // 检测格式 · 兜底
-  const isCodexSession = events.some(e => e.type === 'session_meta' || e.type === 'response_item' || e.type === 'event_msg');
-  const isDaemonLog = !isCodexSession && events.some(e => e.direction && e.summary);
-  const formatHint = isCodexSession ? 'codex session' : isDaemonLog ? 'daemon log' : 'unknown';
+  const resumeCommand = buildResumeCommand(meta, sourceInfo);
 
   $('title').classList.remove('placeholder');
-  $('title').textContent = realPrompt
-    || meta.preview
-    || (meta.id?.slice(0, 8) ? `${meta.id.slice(0,8)}…` : null)
-    || (isDaemonLog ? `daemon log · ${name || ''}` : null)
-    || name
-    || `${events.length} events · ${formatHint}`;
-
-  const metaItems = [];
-  if (meta.id) metaItems.push(`<span class="k">thread</span><code>${escapeHtml(meta.id.slice(0, 8))}…</code>`);
-  if (meta.cwd) metaItems.push(`<span class="k">cwd</span><code>${escapeHtml(meta.cwd)}</code>`);
-  if (meta.cli_version) metaItems.push(`<span class="k">cli</span><code>${escapeHtml(meta.cli_version)}</code>`);
-  if (rate?.plan_type) metaItems.push(`<span class="k">plan</span><b>${escapeHtml(rate.plan_type)}</b>`);
-  if (rate?.primary) metaItems.push(`<span class="k">5h</span><b>${rate.primary.used_percent}%</b>`);
-  if (rate?.secondary) metaItems.push(`<span class="k">7d</span><b>${rate.secondary.used_percent}%</b>`);
-  $('meta').innerHTML = metaItems.join(' <span class="meta-divider">·</span> ');
+  $('title').textContent = meta.id ? `codex resume ${meta.id.slice(0, 8)}...` : (name || `${events.length} events`);
+  $('meta').classList.add('command-mode');
+  $('meta').innerHTML = renderResumeCommand(resumeCommand, meta, sourceInfo);
 
   // stats
   const stats = {
@@ -1319,7 +1405,7 @@ $('file').addEventListener('change', (e) => {
   const f = e.target.files[0];
   if (!f) return;
   const r = new FileReader();
-  r.onload = (ev) => processSession(ev.target.result, f.name);
+  r.onload = (ev) => processSession(ev.target.result, { name: f.name });
   r.readAsText(f);
 });
 
@@ -1330,7 +1416,7 @@ picker.addEventListener('drop', (e) => {
   const f = e.dataTransfer.files[0];
   if (!f) return;
   const r = new FileReader();
-  r.onload = (ev) => processSession(ev.target.result, f.name);
+  r.onload = (ev) => processSession(ev.target.result, { name: f.name });
   r.readAsText(f);
 });
 
@@ -1338,7 +1424,7 @@ picker.addEventListener('drop', (e) => {
 const qp = new URLSearchParams(location.search);
 const url = qp.get('file');
 if (url) {
-  fetch(url).then(r => r.text()).then(t => processSession(t, url)).catch(e => {
+  fetch(url).then(r => r.text()).then(t => processSession(t, { name: url, sourcePath: url })).catch(e => {
     $('title').textContent = '加载失败 · ' + (e.message || url);
   });
 }

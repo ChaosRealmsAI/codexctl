@@ -42,6 +42,8 @@ pub(crate) fn run_viewer(
             "name": source.name,
             "path": source.path,
             "run_id": source.run_id,
+            "codex_bin": source.codex_bin,
+            "codex_home": source.codex_home,
             "bytes": source.text.len(),
         }
     }))
@@ -56,7 +58,13 @@ fn load_source(
     args: &ViewArgs,
 ) -> Result<ViewerSource> {
     if let Some(file) = &args.file {
-        return read_jsonl_source("file", file, None);
+        return read_jsonl_source(
+            "file",
+            file,
+            None,
+            codex_bin.to_string(),
+            codex_home.clone(),
+        );
     }
 
     let Some(run_id) = &args.run_id else {
@@ -70,7 +78,13 @@ fn load_source(
         log_mode,
         run_id,
     )?;
-    read_jsonl_source("run-jsonl", &thread_path, Some(run_id.clone()))
+    read_jsonl_source(
+        "run-jsonl",
+        &thread_path,
+        Some(run_id.clone()),
+        codex_bin.to_string(),
+        codex_home.clone(),
+    )
 }
 
 fn thread_path_for_run(
@@ -111,10 +125,13 @@ fn read_jsonl_source(
     kind: &'static str,
     file: &Path,
     run_id: Option<String>,
+    codex_bin: String,
+    codex_home: Option<PathBuf>,
 ) -> Result<ViewerSource> {
     let text = fs::read_to_string(file)
         .with_context(|| format!("read viewer source file {}", file.display()))?;
     let path = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
+    let codex_home = codex_home.or_else(|| derive_codex_home_from_rollout_path(&path));
     Ok(ViewerSource {
         kind,
         name: path
@@ -124,6 +141,8 @@ fn read_jsonl_source(
             .to_string(),
         path: Some(path),
         run_id,
+        codex_bin,
+        codex_home,
         text,
     })
 }
@@ -137,6 +156,13 @@ fn write_viewer_html(out: Option<&Path>, source: &ViewerSource) -> Result<PathBu
         fs::create_dir_all(parent)
             .with_context(|| format!("create viewer output dir {}", parent.display()))?;
     }
+    let context = json!({
+        "name": source.name,
+        "sourcePath": source.path,
+        "runId": source.run_id,
+        "codexBin": source.codex_bin,
+        "codexHome": source.codex_home,
+    });
     let boot = format!(
         r#"<script>
 window.addEventListener('DOMContentLoaded', () => {{
@@ -145,7 +171,7 @@ window.addEventListener('DOMContentLoaded', () => {{
 </script>
 "#,
         js_string(&source.text)?,
-        js_string(&source.name)?,
+        serde_json::to_string(&context)?,
     );
     let html = if VIEWER_HTML.contains("</body>") {
         VIEWER_HTML.replace("</body>", &format!("{boot}</body>"))
@@ -167,6 +193,12 @@ fn default_viewer_path() -> Result<PathBuf> {
         .context("system clock before UNIX_EPOCH")?
         .as_millis();
     Ok(base.join(format!("view-{millis}-{}.html", std::process::id())))
+}
+
+fn derive_codex_home_from_rollout_path(path: &Path) -> Option<PathBuf> {
+    let raw = path.to_string_lossy();
+    raw.find("/sessions/")
+        .map(|index| PathBuf::from(raw[..index].to_string()))
 }
 
 fn js_string(value: &str) -> Result<String> {
@@ -199,5 +231,7 @@ struct ViewerSource {
     name: String,
     path: Option<PathBuf>,
     run_id: Option<String>,
+    codex_bin: String,
+    codex_home: Option<PathBuf>,
     text: String,
 }
